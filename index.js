@@ -1,5 +1,7 @@
-const { Client, GatewayIntentBits, Partials, ActivityType, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const client = new Client({
@@ -14,62 +16,154 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
 
-// Import des modules de gestion
+// Import des modules
 const voiceManager = require('./modules/voiceManager');
 const roleManager = require('./modules/roleManager');
 const ticketSystem = require('./modules/ticketSystem');
-const { handleModMail, handleStaffCommands } = require('./modules/modMail');
+const welcomeManager = require('./modules/welcomeManager'); // Si présent
 
-client.once('ready', (c) => {
-    console.log(`\n🚨 [BOT GESTION] Mode Maintenance Activé sous : ${c.user.tag}`);
+const voiceInfo = require('./modules/voiceInfo');
+const infoPack = require('./modules/infoPack');
+const soutenir = require('./modules/soutenir');
+const partenaire = require('./modules/partenaire');
+const reglement = require('./modules/reglement');
+const presentation = require('./modules/presentation');
+const critereEsport = require('./modules/critereEsport');
 
-    // Statut permanent SERVEUR EN PANNE
-    client.user.setPresence({
-        status: 'dnd',
-        activities: [{
-            name: '🚨 SERVEUR EN PANNE | Gestion Indisponible',
-            type: ActivityType.Custom
-        }]
-    });
-});
+// =====================================================
+// GESTION DU STOCKAGE DES IDs DE MESSAGES
+// =====================================================
+const STORE_PATH = path.join(__dirname, './data/embed_messages.json');
 
-// Blocage des vocaux
-client.on('voiceStateUpdate', async (oldState, newState) => {
-    if (newState.channelId) {
-        const member = newState.member;
-        if (member.user.bot || member.permissions.has(PermissionFlagsBits.Administrator)) return;
+if (!fs.existsSync(path.dirname(STORE_PATH))) {
+    fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
+}
 
-        await newState.disconnect().catch(() => {});
-        await member.send("🚨 **MAINTENANCE EN COURS** : Les salons vocaux sont temporairement fermés.").catch(() => {});
+function loadEmbedStore() {
+    try {
+        if (fs.existsSync(STORE_PATH)) {
+            return JSON.parse(fs.readFileSync(STORE_PATH, 'utf-8'));
+        }
+    } catch (err) {
+        console.error('⚠️ [EMBED STORE] Erreur de lecture :', err);
     }
-});
+    return {};
+}
 
-// Blocage des tickets / boutons
-client.on('interactionCreate', async (interaction) => {
-    if (interaction.isButton() || interaction.isStringSelectMenu()) {
-        return interaction.reply({
-            content: "🚨 **SERVEUR EN PANNE** : Les tickets et fonctionnalités de gestion sont indisponibles durant la maintenance.",
-            ephemeral: true
+function saveEmbedStore(data) {
+    try {
+        fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 4), 'utf-8');
+    } catch (err) {
+        console.error('⚠️ [EMBED STORE] Erreur d\'écriture :', err);
+    }
+}
+
+// =====================================================
+// GESTION DES ERREURS GLOBALES
+// =====================================================
+client.on('error', (error) => console.error('⚠️ [DISCORD API ERROR]', error));
+process.on('unhandledRejection', (reason) => console.error('⚠️ [UNHANDLED REJECTION]', reason));
+process.on('uncaughtException', (error) => console.error('⚠️ [UNCAUGHT EXCEPTION]', error));
+
+// =====================================================
+// FONCTION DE DÉPLOIEMENT/MISE À JOUR DES EMBEDS
+// =====================================================
+async function sendOrUpdateEmbeds() {
+    console.log('\n📥 [EMBEDS] Démarrage du contrôle des messages d\'information...');
+    const store = loadEmbedStore();
+
+    const deployEmbed = async (channelId, embedData, key) => {
+        try {
+            if (!channelId || channelId.includes('ID_SALON') || channelId.includes('TON_ID')) return;
+
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel) return;
+
+            const embedsToSend = Array.isArray(embedData) ? embedData : [embedData];
+            const existingMsgId = store[key];
+
+            if (existingMsgId) {
+                const existingMsg = await channel.messages.fetch(existingMsgId).catch(() => null);
+                if (existingMsg) {
+                    await existingMsg.edit({ embeds: embedsToSend });
+                    return;
+                }
+            }
+
+            const newMsg = await channel.send({ embeds: embedsToSend });
+            store[key] = newMsg.id;
+            saveEmbedStore(store);
+
+        } catch (err) {
+            console.error(`❌ [EMBEDS ERROR] ${key} :`, err.message);
+        }
+    };
+
+    if (voiceInfo && voiceInfo.VOICE_CHANNEL_IDS) {
+        for (let i = 0; i < voiceInfo.VOICE_CHANNEL_IDS.length; i++) {
+            await deployEmbed(voiceInfo.VOICE_CHANNEL_IDS[i], voiceInfo.createVoiceEmbed(), `Voice_Info_${i}`);
+        }
+    }
+
+    if (infoPack && infoPack.INFO_CHANNEL_IDS) {
+        await deployEmbed(infoPack.INFO_CHANNEL_IDS.MAILLOT, infoPack.getMaillotEmbed(), 'InfoPack_Maillot');
+        await deployEmbed(infoPack.INFO_CHANNEL_IDS.MAP_1V1, infoPack.getMapEmbed(), 'InfoPack_Map1v1');
+        await deployEmbed(infoPack.INFO_CHANNEL_IDS.CODE_CREATEUR, infoPack.getCreatorCodeEmbed(), 'InfoPack_CodeCreateur');
+        await deployEmbed(infoPack.INFO_CHANNEL_IDS.LOI_1901, infoPack.getLoi1901Embed(), 'InfoPack_Loi1901');
+    }
+
+    if (soutenir) await deployEmbed(soutenir.SOUTENIR_CHANNEL_ID, soutenir.createSoutenirEmbed(), 'Soutenir');
+    if (partenaire) await deployEmbed(partenaire.PARTENAIRE_CHANNEL_ID, partenaire.createPartenaireEmbed(), 'Partenaire');
+    if (reglement) await deployEmbed(reglement.REGLEMENT_CHANNEL_ID, reglement.createReglementEmbeds(), 'Reglement');
+    if (presentation) await deployEmbed(presentation.PRESENTATION_CHANNEL_ID, presentation.createPresentationEmbeds(), 'Presentation');
+    if (critereEsport) await deployEmbed(critereEsport.CRITERE_CHANNEL_ID, critereEsport.createCritereEmbeds(), 'CritereEsport');
+
+    console.log('✨ [EMBEDS] Vérification et mise à jour terminées.\n');
+}
+
+// =====================================================
+// INITIALISATION DU BOT
+// =====================================================
+client.once('ready', async (c) => {
+    console.log(`\n==========================================`);
+    console.log(`✅ [SYSTEM] Connecté en tant que : ${c.user.tag}`);
+    console.log(`==========================================\n`);
+
+    try {
+        if (typeof voiceManager === 'function') voiceManager(client);
+        if (typeof welcomeManager === 'function') welcomeManager(client);
+        if (typeof roleManager === 'function') roleManager(client);
+        if (typeof ticketSystem === 'function') ticketSystem(client);
+    } catch (err) {
+        console.error('❌ [MODULE ERROR] Erreur au chargement des modules :', err);
+    }
+
+    await sendOrUpdateEmbeds();
+
+    // Boucle de statut dynamique
+    let statusIndex = 0;
+    setInterval(async () => {
+        const totalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
+        const activities = [
+            { name: "CustomStatus", state: `${totalMembers} membres sur le serveur`, type: ActivityType.Custom },
+            { name: "CustomStatus", state: `Dev By Logs`, type: ActivityType.Custom }
+        ];
+
+        client.user.setPresence({
+            activities: [activities[statusIndex]],
+            status: 'idle'
         });
-    }
+
+        statusIndex = (statusIndex + 1) % activities.length;
+    }, 15000);
 });
 
-// Blocage du ModMail / Messages privés
-client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-
-    if (!message.guild) {
-        return message.reply("🚨 **SERVEUR EN PANNE** : Le support par ModMail est désactivé durant la maintenance.");
-    }
-});
-
-// Serveur Web Express
+// =====================================================
+// SERVEUR WEB EXPRESS
+// =====================================================
 const app = express();
 const PORT = process.env.PORT || 3002;
-app.get('/', (req, res) => res.send('🚨 Bot Gestion - Maintenance'));
+app.get('/', (req, res) => res.send('🚨 Bot Gestion - Actif'));
 app.listen(PORT, () => console.log(`🌐 [Bot Gestion] Actif sur le port ${PORT}`));
-
-process.on('unhandledRejection', err => console.error('⚠️ Rejet non géré :', err));
-process.on('uncaughtException', err => console.error('⚠️ Exception non capturée :', err));
 
 client.login(process.env.DISCORD_TOKEN);

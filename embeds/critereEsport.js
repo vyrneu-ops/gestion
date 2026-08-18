@@ -31,7 +31,7 @@ const createCritereEmbeds = () => {
             `*Ce système pondéré associe l'exigence du circuit européen (65%) à la constance globale du joueur (35%).*`
         );
 
-    // DEUXIÈME EMBED : LES PÔLES D'ÉVOLUTION (GRINDER À CENTRE DE FORMATION)
+    // DEUXIÈME EMBED : LES PÔLES D'ÉVOLUTION
     const embed2 = new EmbedBuilder()
         .setColor('#D4AF37')
         .setDescription(
@@ -82,7 +82,32 @@ const createCritereEmbeds = () => {
     return [embed1, embed2, embed3];
 };
 
+// 🔄 FONCTION D'ENVOI OU DE MISE À JOUR SANS NOTIFICATION
+const deployOrUpdateCritereEmbeds = async (client) => {
+    try {
+        const channel = await client.channels.fetch(CRITERE_CHANNEL_ID);
+        if (!channel) return console.error("Salon introuvable.");
+
+        const embeds = createCritereEmbeds();
+        const messages = await channel.messages.fetch({ limit: 10 });
+        const existingMessage = messages.find(m => m.author.id === client.user.id);
+
+        if (existingMessage) {
+            // Édite le message existant sans renvoyer de notification
+            await existingMessage.edit({ embeds });
+            console.log("✅ Message des critères mis à jour avec succès.");
+        } else {
+            // Envoie un premier message s'il n'en existe aucun
+            await channel.send({ embeds });
+            console.log("✅ Nouveau message des critères envoyé.");
+        }
+    } catch (error) {
+        console.error("❌ Erreur lors de la mise à jour des critères :", error);
+    }
+};
+
 module.exports = { 
     createCritereEmbeds, 
+    deployOrUpdateCritereEmbeds,
     CRITERE_CHANNEL_ID 
 };

@@ -36,7 +36,30 @@ const createPartenaireEmbed = () => {
         });
 };
 
+// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM
+const deployOrUpdatePartenaireEmbed = async (client) => {
+    try {
+        const channel = await client.channels.fetch(PARTENAIRE_CHANNEL_ID).catch(() => null);
+        if (!channel) return console.error(`[PARTENARIAT] Salon introuvable : ${PARTENAIRE_CHANNEL_ID}`);
+
+        const embed = createPartenaireEmbed();
+        const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+        const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
+
+        if (existingMessage) {
+            await existingMessage.edit({ embeds: [embed] });
+            console.log("✅ Message des partenariats mis à jour.");
+        } else {
+            await channel.send({ embeds: [embed] });
+            console.log("✅ Nouveau message des partenariats envoyé.");
+        }
+    } catch (error) {
+        console.error("❌ Erreur lors de la mise à jour des partenariats :", error);
+    }
+};
+
 module.exports = { 
     createPartenaireEmbed, 
+    deployOrUpdatePartenaireEmbed,
     PARTENAIRE_CHANNEL_ID 
 };

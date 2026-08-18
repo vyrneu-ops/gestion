@@ -36,7 +36,11 @@ function readDB() {
 }
 
 function writeDB(data) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 4), "utf-8");
+    try {
+        fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 4), "utf-8");
+    } catch (err) {
+        console.error("[TICKET DB ERROR] Erreur d'écriture :", err);
+    }
 }
 
 const globalCooldowns = new Set();
@@ -74,7 +78,6 @@ module.exports = async (client) => {
             )
             .setFooter({ text: "Team HeLoRiA • Sélectionnez une option ci-dessous" });
 
-        // Menu déroulant SANS émojis
         const menuSelection = new StringSelectMenuBuilder()
             .setCustomId("ticket_select")
             .setPlaceholder("Sélectionnez votre catégorie...")
@@ -145,7 +148,7 @@ module.exports = async (client) => {
             }
 
             if (i.isModalSubmit() && i.customId.startsWith("submit_review_")) {
-                await i.deferReply();
+                await i.deferReply().catch(() => {});
                 const parts = i.customId.split("_");
                 const stars = parseInt(parts[2]);
                 const staffId = parts[3];
@@ -177,84 +180,96 @@ module.exports = async (client) => {
             return;
         }
 
-        // ANTI-SPAM
+        // ANTI-SPAM DE BOUTONS
         if (i.isButton() || i.isStringSelectMenu()) {
             const cooldownKey = `${i.user.id}-${i.customId}`;
-            if (globalCooldowns.has(cooldownKey)) return i.reply({ content: "Action trop rapide, veuillez patienter.", ephemeral: true });
+            if (globalCooldowns.has(cooldownKey)) {
+                if (!i.deferred && !i.replied) return i.reply({ content: "Action trop rapide, veuillez patienter.", ephemeral: true }).catch(() => {});
+                return;
+            }
             globalCooldowns.add(cooldownKey);
             setTimeout(() => globalCooldowns.delete(cooldownKey), 1200);
+        }
+
+        // OUVERTURE DE TICKET
+        if (i.isStringSelectMenu() && i.customId === "ticket_select") {
+            // ACKNOWLEDGE IMMÉDIAT (Évite l'état "Le bot est en train de réfléchir")
+            await i.deferReply({ ephemeral: true }).catch(() => {});
+
+            const db = readDB();
+            const type = i.values[0];
+
+            if (db.blacklist.includes(i.user.id)) {
+                return i.editReply({ content: "Vous êtes banni du système de support." });
+            }
+
+            try {
+                const categoryId = config.CATEGORIES[type];
+                const basePermissions = [
+                    { id: i.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                    { id: i.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }
+                ];
+
+                (config.ROLES[type] || []).forEach(rId => {
+                    basePermissions.push({ 
+                        id: rId, 
+                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] 
+                    });
+                });
+
+                const ticketChannel = await i.guild.channels.create({
+                    name: `${type}-${i.user.username}`,
+                    type: ChannelType.GuildText,
+                    parent: categoryId || null,
+                    permissionOverwrites: basePermissions
+                });
+
+                db.tickets[ticketChannel.id] = {
+                    userId: i.user.id,
+                    username: i.user.username,
+                    type: type,
+                    createdAt: Date.now(),
+                    lastActivity: Date.now(),
+                    messageCount: 0,
+                    status: "open",
+                    claimedBy: null,
+                    detectedPole: null
+                };
+                writeDB(db);
+
+                const actionButtons = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId("claim").setLabel("Prendre en charge").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId("close").setLabel("Fermer").setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId("delete").setLabel("Supprimer").setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId("blacklist_user").setLabel("Blacklist").setStyle(ButtonStyle.Danger)
+                );
+
+                const utilityButtons = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId("ticket_add_user").setLabel("Ajouter").setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId("ticket_remove_user").setLabel("Retirer").setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId("ticket_create_voice").setLabel("Salon Vocal").setStyle(ButtonStyle.Success)
+                );
+
+                const formEmbed = getFormEmbed(type);
+
+                await ticketChannel.send({ 
+                    content: `Bonjour ${i.user} | @here Un nouveau dossier vient d'être ouvert.`, 
+                    embeds: [formEmbed], 
+                    components: [actionButtons, utilityButtons] 
+                });
+
+                return i.editReply({ content: `Votre salon privé a été initialisé : ${ticketChannel}` });
+
+            } catch (err) {
+                console.error("❌ Erreur lors de la création du ticket :", err);
+                return i.editReply({ content: "Une erreur est survenue lors de la création de votre salon privé. Veuillez réinstaller le système ou contacter un administrateur." });
+            }
         }
 
         const db = readDB();
         const context = db.tickets[i.channel.id];
 
-        // OUVERTURE DE TICKET
-        if (i.isStringSelectMenu() && i.customId === "ticket_select") {
-            if (i.replied || i.deferred) return;
-
-            const type = i.values[0];
-            if (db.blacklist.includes(i.user.id)) return i.reply({ content: "Vous êtes banni du système de support.", ephemeral: true });
-
-            const hasActiveTicket = Object.values(db.tickets).some(t => t.userId === i.user.id && t.status === "open");
-            if (hasActiveTicket) return i.reply({ content: "Vous possédez déjà un ticket ouvert.", ephemeral: true });
-
-            await i.deferReply({ ephemeral: true });
-
-            const categoryId = config.CATEGORIES[type];
-            const basePermissions = [
-                { id: i.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-                { id: i.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }
-            ];
-
-            (config.ROLES[type] || []).forEach(rId => {
-                basePermissions.push({ id: rId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
-            });
-
-            const ticketChannel = await i.guild.channels.create({
-                name: `${type}-${i.user.username}`,
-                type: ChannelType.GuildText,
-                parent: categoryId || null,
-                permissionOverwrites: basePermissions
-            });
-
-            db.tickets[ticketChannel.id] = {
-                userId: i.user.id,
-                username: i.user.username,
-                type: type,
-                createdAt: Date.now(),
-                lastActivity: Date.now(),
-                messageCount: 0,
-                status: "open",
-                claimedBy: null,
-                detectedPole: null
-            };
-            writeDB(db);
-
-            const actionButtons = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId("claim").setLabel("Prendre en charge").setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId("close").setLabel("Fermer").setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId("delete").setLabel("Supprimer").setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId("blacklist_user").setLabel("Blacklist").setStyle(ButtonStyle.Danger)
-            );
-
-            const utilityButtons = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId("ticket_add_user").setLabel("Ajouter").setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId("ticket_remove_user").setLabel("Retirer").setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId("ticket_create_voice").setLabel("Salon Vocal").setStyle(ButtonStyle.Success)
-            );
-
-            let formEmbed = getFormEmbed(type);
-
-            await ticketChannel.send({ 
-                content: `Bonjour ${i.user} | @here Un nouveau dossier vient d'être ouvert.`, 
-                embeds: [formEmbed], 
-                components: [actionButtons, utilityButtons] 
-            });
-
-            return i.editReply({ content: `Votre salon privé a été initialisé : ${ticketChannel}` });
-        }
-
-        // ACTIONS MODERATEUR
+        // ACTIONS MODERATEUR ET GESTION DES BOUTONS
         const isStaffUser = context ? (config.ROLES[context.type] || []).some(rId => i.member.roles.cache.has(rId)) || i.member.permissions.has(PermissionsBitField.Flags.ManageChannels) : i.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
 
         if (i.isButton() && ["ticket_add_user", "ticket_remove_user", "ticket_create_voice"].includes(i.customId)) {

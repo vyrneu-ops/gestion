@@ -38,7 +38,30 @@ const createSoutenirEmbed = () => {
         });
 };
 
+// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM
+const deployOrUpdateSoutenirEmbed = async (client) => {
+    try {
+        const channel = await client.channels.fetch(SOUTENIR_CHANNEL_ID).catch(() => null);
+        if (!channel) return console.error(`[SOUTENIR] Salon introuvable : ${SOUTENIR_CHANNEL_ID}`);
+
+        const embed = createSoutenirEmbed();
+        const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+        const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
+
+        if (existingMessage) {
+            await existingMessage.edit({ embeds: [embed] });
+            console.log("✅ Message de soutien mis à jour.");
+        } else {
+            await channel.send({ embeds: [embed] });
+            console.log("✅ Nouveau message de soutien envoyé.");
+        }
+    } catch (error) {
+        console.error("❌ Erreur lors de la mise à jour du message de soutien :", error);
+    }
+};
+
 module.exports = { 
     createSoutenirEmbed, 
+    deployOrUpdateSoutenirEmbed,
     SOUTENIR_CHANNEL_ID 
 };

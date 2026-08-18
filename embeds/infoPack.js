@@ -46,10 +46,40 @@ const getLoi1901Embed = () => new EmbedBuilder()
         text: 'HeLoRiA • #RiseSoarConquer'
     });
 
+// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM
+const updateSingleChannelEmbed = async (client, channelId, embedSupplier) => {
+    try {
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel) return console.error(`[INFO EMBEDS] Salon introuvable : ${channelId}`);
+
+        const embed = embedSupplier();
+        const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+        const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
+
+        if (existingMessage) {
+            await existingMessage.edit({ embeds: [embed] });
+            console.log(`✅ Message mis à jour dans <#${channelId}>`);
+        } else {
+            await channel.send({ embeds: [embed] });
+            console.log(`✅ Message créé dans <#${channelId}>`);
+        }
+    } catch (error) {
+        console.error(`❌ Erreur sur le salon ${channelId} :`, error);
+    }
+};
+
+const deployOrUpdateInfoEmbeds = async (client) => {
+    await updateSingleChannelEmbed(client, INFO_CHANNEL_IDS.MAILLOT, getMaillotEmbed);
+    await updateSingleChannelEmbed(client, INFO_CHANNEL_IDS.MAP_1V1, getMapEmbed);
+    await updateSingleChannelEmbed(client, INFO_CHANNEL_IDS.CODE_CREATEUR, getCreatorCodeEmbed);
+    await updateSingleChannelEmbed(client, INFO_CHANNEL_IDS.LOI_1901, getLoi1901Embed);
+};
+
 module.exports = {
     INFO_CHANNEL_IDS,
     getMaillotEmbed,
     getMapEmbed,
     getCreatorCodeEmbed,
-    getLoi1901Embed
+    getLoi1901Embed,
+    deployOrUpdateInfoEmbeds
 };

@@ -9,7 +9,7 @@ const EMOJIS = {
     HLR_WIN: '<:hlrwin:1537584105536094248>',
     QUILL: '<:6880quill:1537585310794391563>',
     CROWN: '<a:darkbluecrown:1533535362566324245>',
-    PILLARS: '<:5647premiumicon:1533535330538360942>', // Émoji de secours propre pour les piliers
+    PILLARS: '<:5647premiumicon:1533535330538360942>',
     TELESCOPE: '<:65264telescope:1537586517453832222>'
 };
 
@@ -62,7 +62,30 @@ const createPresentationEmbeds = () => {
     return [embed1, embed2, embed3];
 };
 
+// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM
+const deployOrUpdatePresentationEmbeds = async (client) => {
+    try {
+        const channel = await client.channels.fetch(PRESENTATION_CHANNEL_ID).catch(() => null);
+        if (!channel) return console.error(`[PRÉSENTATION] Salon introuvable : ${PRESENTATION_CHANNEL_ID}`);
+
+        const embeds = createPresentationEmbeds();
+        const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+        const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
+
+        if (existingMessage) {
+            await existingMessage.edit({ embeds });
+            console.log("✅ Message de présentation mis à jour.");
+        } else {
+            await channel.send({ embeds });
+            console.log("✅ Nouveau message de présentation envoyé.");
+        }
+    } catch (error) {
+        console.error("❌ Erreur lors de la mise à jour de la présentation :", error);
+    }
+};
+
 module.exports = { 
     createPresentationEmbeds, 
+    deployOrUpdatePresentationEmbeds,
     PRESENTATION_CHANNEL_ID 
 };

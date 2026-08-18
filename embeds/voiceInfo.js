@@ -23,7 +23,7 @@ const createVoiceEmbed = () => {
         .setDescription(
             `> **Ce salon est actuellement verrouillé à l'écriture.**\n\n` +
 
-            `L'équipe de modération concentre ses interventions sur les salons textuels principaux afin de garantir un espace d'échange fluide et sécurisé. Ne pouvant assurer une surveillance continue sur l'ensemble des salons d'accompagnement vocal, la rédaction y a été temporairement suspendue.\n\n` +
+            `L'équipe de modération concentre ses interventions sur les salons textuels principaux afin de garantir un espace d'échange fluide et sécurisé. Ne pouvant assurer une surveillance continuous sur l'ensemble des salons d'accompagnement vocal, la rédaction y a été temporairement suspendue.\n\n` +
 
             `**${EMOJIS.WARNING} Pourquoi cette mesure ?**\n` +
             `› *Prévention des débordements :* Cet espace faisait trop souvent l'objet de messages inappropriés, de propos haineux ou de règlements de comptes hors cadre.\n` +
@@ -41,7 +41,35 @@ const createVoiceEmbed = () => {
         });
 };
 
+// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR MULTI-SALONS SANS SPAM
+const deployOrUpdateVoiceEmbeds = async (client) => {
+    for (const channelId of VOICE_CHANNEL_IDS) {
+        try {
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel) {
+                console.error(`[VOICE EMBED] Salon introuvable : ${channelId}`);
+                continue;
+            }
+
+            const embed = createVoiceEmbed();
+            const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+            const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
+
+            if (existingMessage) {
+                await existingMessage.edit({ embeds: [embed] });
+                console.log(`✅ Message mis à jour dans le salon vocal <#${channelId}>`);
+            } else {
+                await channel.send({ embeds: [embed] });
+                console.log(`✅ Nouveau message envoyé dans le salon vocal <#${channelId}>`);
+            }
+        } catch (error) {
+            console.error(`❌ Erreur lors de la mise à jour sur le salon vocal ${channelId} :`, error);
+        }
+    }
+};
+
 module.exports = { 
     createVoiceEmbed,
+    deployOrUpdateVoiceEmbeds,
     VOICE_CHANNEL_IDS 
 };
