@@ -16,12 +16,13 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
 
-// Import des modules
+// Import des modules fonctionnels
 const voiceManager = require('./modules/voiceManager');
 const roleManager = require('./modules/roleManager');
 const ticketSystem = require('./modules/ticketSystem');
-const welcomeManager = require('./modules/welcomeManager'); // Si présent
+const welcomeManager = require('./modules/welcomeManager'); 
 
+// Import des modules d'embeds
 const voiceInfo = require('./modules/voiceInfo');
 const infoPack = require('./modules/infoPack');
 const soutenir = require('./modules/soutenir');
@@ -74,7 +75,7 @@ async function sendOrUpdateEmbeds() {
 
     const deployEmbed = async (channelId, embedData, key) => {
         try {
-            if (!channelId || channelId.includes('ID_SALON') || channelId.includes('TON_ID')) return;
+            if (!channelId || typeof channelId !== 'string' || channelId.includes('ID_SALON') || channelId.includes('TON_ID')) return;
 
             const channel = await client.channels.fetch(channelId).catch(() => null);
             if (!channel) return;
@@ -99,24 +100,24 @@ async function sendOrUpdateEmbeds() {
         }
     };
 
-    if (voiceInfo && voiceInfo.VOICE_CHANNEL_IDS) {
+    if (voiceInfo?.VOICE_CHANNEL_IDS && typeof voiceInfo.createVoiceEmbed === 'function') {
         for (let i = 0; i < voiceInfo.VOICE_CHANNEL_IDS.length; i++) {
             await deployEmbed(voiceInfo.VOICE_CHANNEL_IDS[i], voiceInfo.createVoiceEmbed(), `Voice_Info_${i}`);
         }
     }
 
-    if (infoPack && infoPack.INFO_CHANNEL_IDS) {
-        await deployEmbed(infoPack.INFO_CHANNEL_IDS.MAILLOT, infoPack.getMaillotEmbed(), 'InfoPack_Maillot');
-        await deployEmbed(infoPack.INFO_CHANNEL_IDS.MAP_1V1, infoPack.getMapEmbed(), 'InfoPack_Map1v1');
-        await deployEmbed(infoPack.INFO_CHANNEL_IDS.CODE_CREATEUR, infoPack.getCreatorCodeEmbed(), 'InfoPack_CodeCreateur');
-        await deployEmbed(infoPack.INFO_CHANNEL_IDS.LOI_1901, infoPack.getLoi1901Embed(), 'InfoPack_Loi1901');
+    if (infoPack?.INFO_CHANNEL_IDS) {
+        if (typeof infoPack.getMaillotEmbed === 'function') await deployEmbed(infoPack.INFO_CHANNEL_IDS.MAILLOT, infoPack.getMaillotEmbed(), 'InfoPack_Maillot');
+        if (typeof infoPack.getMapEmbed === 'function') await deployEmbed(infoPack.INFO_CHANNEL_IDS.MAP_1V1, infoPack.getMapEmbed(), 'InfoPack_Map1v1');
+        if (typeof infoPack.getCreatorCodeEmbed === 'function') await deployEmbed(infoPack.INFO_CHANNEL_IDS.CODE_CREATEUR, infoPack.getCreatorCodeEmbed(), 'InfoPack_CodeCreateur');
+        if (typeof infoPack.getLoi1901Embed === 'function') await deployEmbed(infoPack.INFO_CHANNEL_IDS.LOI_1901, infoPack.getLoi1901Embed(), 'InfoPack_Loi1901');
     }
 
-    if (soutenir) await deployEmbed(soutenir.SOUTENIR_CHANNEL_ID, soutenir.createSoutenirEmbed(), 'Soutenir');
-    if (partenaire) await deployEmbed(partenaire.PARTENAIRE_CHANNEL_ID, partenaire.createPartenaireEmbed(), 'Partenaire');
-    if (reglement) await deployEmbed(reglement.REGLEMENT_CHANNEL_ID, reglement.createReglementEmbeds(), 'Reglement');
-    if (presentation) await deployEmbed(presentation.PRESENTATION_CHANNEL_ID, presentation.createPresentationEmbeds(), 'Presentation');
-    if (critereEsport) await deployEmbed(critereEsport.CRITERE_CHANNEL_ID, critereEsport.createCritereEmbeds(), 'CritereEsport');
+    if (soutenir?.SOUTENIR_CHANNEL_ID && typeof soutenir.createSoutenirEmbed === 'function') await deployEmbed(soutenir.SOUTENIR_CHANNEL_ID, soutenir.createSoutenirEmbed(), 'Soutenir');
+    if (partenaire?.PARTENAIRE_CHANNEL_ID && typeof partenaire.createPartenaireEmbed === 'function') await deployEmbed(partenaire.PARTENAIRE_CHANNEL_ID, partenaire.createPartenaireEmbed(), 'Partenaire');
+    if (reglement?.REGLEMENT_CHANNEL_ID && typeof reglement.createReglementEmbeds === 'function') await deployEmbed(reglement.REGLEMENT_CHANNEL_ID, reglement.createReglementEmbeds(), 'Reglement');
+    if (presentation?.PRESENTATION_CHANNEL_ID && typeof presentation.createPresentationEmbeds === 'function') await deployEmbed(presentation.PRESENTATION_CHANNEL_ID, presentation.createPresentationEmbeds(), 'Presentation');
+    if (critereEsport?.CRITERE_CHANNEL_ID && typeof critereEsport.createCritereEmbeds === 'function') await deployEmbed(critereEsport.CRITERE_CHANNEL_ID, critereEsport.createCritereEmbeds(), 'CritereEsport');
 
     console.log('✨ [EMBEDS] Vérification et mise à jour terminées.\n');
 }
@@ -140,9 +141,9 @@ client.once('ready', async (c) => {
 
     await sendOrUpdateEmbeds();
 
-    // Boucle de statut dynamique
+    // Statut dynamique
     let statusIndex = 0;
-    setInterval(async () => {
+    setInterval(() => {
         const totalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
         const activities = [
             { name: "CustomStatus", state: `${totalMembers} membres sur le serveur`, type: ActivityType.Custom },
@@ -163,7 +164,9 @@ client.once('ready', async (c) => {
 // =====================================================
 const app = express();
 const PORT = process.env.PORT || 3002;
-app.get('/', (req, res) => res.send('🚨 Bot Gestion - Actif'));
+
+app.get('/', (req, res) => res.send('🚨 Bot Gestion HeLoRiA — Actif'));
 app.listen(PORT, () => console.log(`🌐 [Bot Gestion] Actif sur le port ${PORT}`));
 
-client.login(process.env.DISCORD_TOKEN);
+// Supporte la clé TOKEN ou DISCORD_TOKEN
+client.login(process.env.TOKEN || process.env.DISCORD_TOKEN);

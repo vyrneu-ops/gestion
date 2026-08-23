@@ -8,7 +8,7 @@ const {
 } = require("discord.js");
 const config = require("../data/rolesConfig");
 
-// Palette de couleurs dorée & prestige (identique aux autres salons)
+// Palette de couleurs dorée & prestige
 const COLOR_GOLD = "#D4AF37";
 const COLOR_BLACK = "#000001";
 
@@ -31,7 +31,7 @@ module.exports = (client) => {
         if (msg.content === "+setup-roles") {
             try {
                 if (!msg.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                    return msg.reply("Seuls les administrateurs peuvent exécuter cette commande.");
+                    return msg.reply("Seuls les administrateurs peuvent exécuter cette commande.").catch(() => {});
                 }
 
                 await msg.delete().catch(() => {});
@@ -45,9 +45,7 @@ module.exports = (client) => {
                     }
                 }
 
-                // =====================================================
-                // 1. EMBED HEADER PRINCIPAL
-                // =====================================================
+                // EMBED HEADER
                 const headerEmbed = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
                     .setTitle(`${EMOJIS.HLR_WIN} HeLoRiA — CONFIGURATION DU PROFIL`)
@@ -60,9 +58,7 @@ module.exports = (client) => {
                         `> • Toute modification est enregistrée instantanément.`
                     );
 
-                // =====================================================
-                // 2. EMBED & MENU : IDENTITÉ
-                // =====================================================
+                // EMBED & MENU : IDENTITÉ
                 const embedGenre = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
                     .setTitle(`${EMOJIS.CERTIFIED} Ⅰ. IDENTITÉ & GENRE`)
@@ -79,9 +75,7 @@ module.exports = (client) => {
                         ])
                 );
 
-                // =====================================================
-                // 3. EMBED & MENU : PLATEFORME
-                // =====================================================
+                // EMBED & MENU : PLATEFORME
                 const embedPlateforme = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
                     .setTitle(`${EMOJIS.MIC_ANIM} Ⅱ. SUPPORT & PLATEFORME DE JEU`)
@@ -99,9 +93,7 @@ module.exports = (client) => {
                         ])
                 );
 
-                // =====================================================
-                // 4. EMBED & MENU : NOTIFICATIONS
-                // =====================================================
+                // EMBED & MENU : NOTIFICATIONS
                 const embedNotifs = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
                     .setTitle(`${EMOJIS.RULES} Ⅲ. PREFÉRENCES DE NOTIFICATIONS`)
@@ -123,9 +115,7 @@ module.exports = (client) => {
                         ])
                 );
 
-                // =====================================================
-                // 5. EMBED & MENU : COMPETITION
-                // =====================================================
+                // EMBED & MENU : COMPETITION
                 const embedDivision = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
                     .setTitle(`${EMOJIS.TRIAL_MOD} Ⅳ. NIVEAU COMPÉTITIF — FORTNITE`)
@@ -133,7 +123,7 @@ module.exports = (client) => {
                         `Affichez votre division compétitive actuelle.\n\n` +
                         `> **Note importante :** L'accès à la **Division 1** nécessite impérativement une vérification de vos preuves de rang auprès du Staff.`
                     )
-                    .setFooter({ text: "HeLoRiA • #RiseSoarConquer", iconURL: "https://media.discordapp.net/attachments/1531791102011772966/1537576540991127613/a9275f03-54ce-466f-afbd-6f67fb185796.png?ex=6a8033fe&is=6a7ee27e&hm=349ba9cd2750d9abee196ebab615d71e19080038a4b6b7746e861639d3a86344&=&format=webp&quality=lossless&width=1024&height=1024" });
+                    .setFooter({ text: "HeLoRiA • #RiseSoarConquer" });
 
                 const menuDivision = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder()
@@ -148,12 +138,11 @@ module.exports = (client) => {
                         ])
                 );
 
-                // Envoi successif des blocs d'embeds
-                await msg.channel.send({ embeds: [headerEmbed] });
-                await msg.channel.send({ embeds: [embedGenre], components: [menuGenre] });
-                await msg.channel.send({ embeds: [embedPlateforme], components: [menuPlateforme] });
-                await msg.channel.send({ embeds: [embedNotifs], components: [menuNotifs] });
-                await msg.channel.send({ embeds: [embedDivision], components: [menuDivision] });
+                await msg.channel.send({ embeds: [headerEmbed] }).catch(() => {});
+                await msg.channel.send({ embeds: [embedGenre], components: [menuGenre] }).catch(() => {});
+                await msg.channel.send({ embeds: [embedPlateforme], components: [menuPlateforme] }).catch(() => {});
+                await msg.channel.send({ embeds: [embedNotifs], components: [menuNotifs] }).catch(() => {});
+                await msg.channel.send({ embeds: [embedDivision], components: [menuDivision] }).catch(() => {});
 
             } catch (error) {
                 console.error("Erreur lors de l'initialisation du panneau de rôles :", error);
@@ -162,24 +151,28 @@ module.exports = (client) => {
     });
 
     // =====================================================
-    // GESTION DES INTERACTIONS & CONFIRMATION DE CHANGEMENT
+    // GESTION DES INTERACTIONS
     // =====================================================
     client.on("interactionCreate", async (interaction) => {
-        // GESTION DES BOUTONS DE CONFIRMATION (OUI / NON)
-        if (interaction.isButton() && interaction.customId.startsWith("confirm_role_")) {
-            await interaction.deferUpdate();
+        if (!interaction.guild) return;
 
-            const [, , type, selectedValue, targetRoleId] = interaction.customId.split("_");
+        // BOUTONS DE CONFIRMATION
+        if (interaction.isButton() && interaction.customId.startsWith("confirm_role_")) {
+            await interaction.deferUpdate().catch(() => {});
+
+            const parts = interaction.customId.split("_");
+            const isYes = parts[2] === "yes";
+            const type = parts[3];
+            const selectedValue = parts[4];
+            const targetRoleId = parts[5];
             const member = interaction.member;
 
-            // Si l'utilisateur clique sur OUI
-            if (interaction.customId.includes("_yes_")) {
+            if (isYes) {
                 let categoryConfig;
                 if (type === "genre") categoryConfig = config.ROLES_GENRE;
                 if (type === "plateforme") categoryConfig = config.ROLES_PLATEFORME;
                 if (type === "division") categoryConfig = config.ROLES_DIVISION;
 
-                // On retire les anciens rôles de la catégorie
                 if (categoryConfig) {
                     for (const key in categoryConfig) {
                         const id = categoryConfig[key];
@@ -187,8 +180,7 @@ module.exports = (client) => {
                     }
                 }
 
-                // On ajoute le nouveau rôle
-                if (selectedValue !== "NON_PRECISE" && targetRoleId) {
+                if (selectedValue !== "NON_PRECISE" && targetRoleId && targetRoleId !== "undefined") {
                     await member.roles.add(targetRoleId).catch(() => {});
                 }
 
@@ -198,32 +190,27 @@ module.exports = (client) => {
                     .setDescription("Votre changement de rôle a bien été effectué et enregistré.")
                     .setFooter({ text: "HeLoRiA • Système de Profil" });
 
-                return interaction.editReply({ embeds: [successEmbed], components: [] });
-            }
-
-            // Si l'utilisateur clique sur NON
-            if (interaction.customId.includes("_no_")) {
+                return interaction.editReply({ embeds: [successEmbed], components: [] }).catch(() => {});
+            } else {
                 const cancelEmbed = new EmbedBuilder()
                     .setColor(COLOR_BLACK)
                     .setTitle("⚠️ Modification Annulée")
                     .setDescription("Votre rôle actuel a été conservé sans modification.")
                     .setFooter({ text: "HeLoRiA • Système de Profil" });
 
-                return interaction.editReply({ embeds: [cancelEmbed], components: [] });
+                return interaction.editReply({ embeds: [cancelEmbed], components: [] }).catch(() => {});
             }
         }
 
-        // GESTION DES MENUS DÉRROULANTS
-        if (!interaction.isStringSelectMenu()) return;
-        if (!interaction.customId.startsWith("role_select_")) return;
+        // MENUS DERROULANTS
+        if (!interaction.isStringSelectMenu() || !interaction.customId.startsWith("role_select_")) return;
 
         try {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ ephemeral: true }).catch(() => {});
 
             const member = interaction.member;
             const selectedValue = interaction.values[0];
 
-            // Helper pour réponse directe sans confirmation
             const sendResponseEmbed = async (title, statusText, isSuccess = true) => {
                 const responseEmbed = new EmbedBuilder()
                     .setColor(isSuccess ? COLOR_GOLD : COLOR_BLACK)
@@ -231,10 +218,9 @@ module.exports = (client) => {
                     .setDescription(statusText)
                     .setFooter({ text: "HeLoRiA • Système de Profil" });
 
-                return interaction.editReply({ embeds: [responseEmbed], components: [] });
+                return interaction.editReply({ embeds: [responseEmbed], components: [] }).catch(() => {});
             };
 
-            // Helper pour demander confirmation (OUI / NON)
             const askConfirmation = async (type, currentRoleName, targetRoleId) => {
                 const confirmEmbed = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
@@ -256,17 +242,13 @@ module.exports = (client) => {
                         .setStyle(ButtonStyle.Danger)
                 );
 
-                return interaction.editReply({ embeds: [confirmEmbed], components: [confirmButtons] });
+                return interaction.editReply({ embeds: [confirmEmbed], components: [confirmButtons] }).catch(() => {});
             };
 
             // 1. GENRE
             if (interaction.customId === "role_select_genre") {
                 const roleId = config.ROLES_GENRE[selectedValue];
-                if (!roleId || roleId.startsWith("ID_")) {
-                    return sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas configuré dans le bot.", false);
-                }
-
-                // Vérifier si le membre a déjà un rôle de genre
+                
                 let existingRole = null;
                 for (const key in config.ROLES_GENRE) {
                     const id = config.ROLES_GENRE[key];
@@ -285,7 +267,7 @@ module.exports = (client) => {
                     if (id && member.roles.cache.has(id)) await member.roles.remove(id).catch(() => {});
                 }
 
-                if (selectedValue !== "NON_PRECISE") await member.roles.add(roleId).catch(() => {});
+                if (selectedValue !== "NON_PRECISE" && roleId) await member.roles.add(roleId).catch(() => {});
                 return sendResponseEmbed("Profil Mis à Jour", "Votre identité a été enregistrée avec succès.", true);
             }
 
@@ -318,7 +300,7 @@ module.exports = (client) => {
                 return sendResponseEmbed("Profil Mis à Jour", "Votre plateforme de jeu a été modifiée avec succès.", true);
             }
 
-            // 3. NOTIFICATIONS (Cochage multiple - Pas besoin de confirmation)
+            // 3. NOTIFICATIONS
             if (interaction.customId === "role_select_notifs") {
                 const selectedValues = interaction.values;
                 
@@ -339,16 +321,17 @@ module.exports = (client) => {
             // 4. DIVISION FORTNITE
             if (interaction.customId === "role_select_division") {
                 const roleId = config.ROLES_DIVISION[selectedValue];
-                if (!roleId || roleId.startsWith("ID_")) {
-                    return sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas configuré dans le bot.", false);
-                }
-
+                
                 if (selectedValue === "DIV_1") {
                     return sendResponseEmbed(
                         "Vérification Requise — Division 1", 
-                        "L'accès au rôle **Division 1** nécessite une validation manuelle par le Staff.\n\nVeuillez ouvrir un ticket pour transmettre vos preuves de rang à un responsable.",
+                        "L'accès au rôle **Division 1** nécessite une validation manuelle par le Staff.\n\nVeuillez ouvrir un ticket pour transmettre vos preuves de rang.",
                         false
                     );
+                }
+
+                if (!roleId || roleId.startsWith("ID_")) {
+                    return sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas configuré dans le bot.", false);
                 }
 
                 let existingRole = null;
@@ -373,7 +356,7 @@ module.exports = (client) => {
                 return sendResponseEmbed("Profil Mis à Jour", "Votre division compétitive a été mise à jour.", true);
             }
         } catch (error) {
-            console.error("Erreur lors de la gestion de l'interaction des rôles :", error);
+            console.error("Erreur lors de la gestion des rôles :", error);
         }
     });
 };

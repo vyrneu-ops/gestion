@@ -1,5 +1,5 @@
 module.exports = {
-    // Salon où envoyer la commande d'affichage
+    // 📌 ID du serveur (Guild)
     GUILD_ID: "1531784092738392144",
 
     // --- RÔLES GENRE ---

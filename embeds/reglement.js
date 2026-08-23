@@ -23,7 +23,7 @@ const createReglementEmbeds = () => {
             `Ce règlement définit le cadre nécessaire au bon fonctionnement de notre écosystème. Chaque membre est un ambassadeur de l'image de **HeLoRiA** et se doit d'adopter un comportement irréprochable.\n\n` +
             `### ${EMOJIS.TRIAL_MOD} ARTICLE I : CONDUITE ET ÉCHANGES\n` +
             `> **01.** Le respect mutuel envers les membres et la direction est une condition sine qua non.\n` +
-            `> **02.** Les provocations, insultes, menaces ou tentatives d'humiliation sont strictly proscrites.\n` +
+            `> **02.** Les provocations, insultes, menaces ou tentatives d'humiliation sont strictement proscrites.\n` +
             `> **03.** Tout propos discriminatoire (racisme, sexisme, homophobie, haine) entraînera une exclusion immédiate.\n` +
             `> **04.** En cas de désaccord, maintenez un ton courtois ou déplacez l'échange en privé.\n` +
             `> **05.** Toute forme de spam, flood ou envoi massif de messages est interdite.\n` +
@@ -69,7 +69,7 @@ const createReglementEmbeds = () => {
     return [embed1, embed2, embed3];
 };
 
-// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM
+// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM (UPSERT MULTI-EMBEDS)
 const deployOrUpdateReglementEmbeds = async (client) => {
     try {
         const channel = await client.channels.fetch(REGLEMENT_CHANNEL_ID).catch(() => null);
@@ -80,6 +80,20 @@ const deployOrUpdateReglementEmbeds = async (client) => {
         const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
 
         if (existingMessage) {
+            const oldEmbeds = existingMessage.embeds;
+            
+            // Comparaison simple pour éviter l'édition si le contenu est identique
+            const isIdentical = oldEmbeds.length === embeds.length &&
+                oldEmbeds.every((oldEmb, index) => 
+                    oldEmb.description === embeds[index].data.description &&
+                    oldEmb.title === embeds[index].data.title
+                );
+
+            if (isIdentical) {
+                console.log("ℹ️ Aucun changement détecté pour le règlement. Message conservé.");
+                return;
+            }
+
             await existingMessage.edit({ embeds });
             console.log("✅ Message du règlement mis à jour.");
         } else {

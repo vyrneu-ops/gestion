@@ -1,12 +1,12 @@
 {
-    "tickets": {},
-    "blacklist": [],
-    "stats": {
-        "1431661348218998948": {
-            "closedTickets": 1,
-            "reviews": [
-                5
-            ]
-        }
+  "tickets": {},
+  "blacklist": [],
+  "stats": {
+    "1431661348218998948": {
+      "closedTickets": 1,
+      "reviews": [
+        5
+      ]
     }
+  }
 }

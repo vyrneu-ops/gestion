@@ -62,7 +62,7 @@ const createPresentationEmbeds = () => {
     return [embed1, embed2, embed3];
 };
 
-// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM
+// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM (UPSERT MULTI-EMBEDS)
 const deployOrUpdatePresentationEmbeds = async (client) => {
     try {
         const channel = await client.channels.fetch(PRESENTATION_CHANNEL_ID).catch(() => null);
@@ -73,6 +73,20 @@ const deployOrUpdatePresentationEmbeds = async (client) => {
         const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
 
         if (existingMessage) {
+            const oldEmbeds = existingMessage.embeds;
+
+            // Comparaison simple des titres et descriptions pour éviter tout appel inutile
+            const isIdentical = oldEmbeds.length === embeds.length &&
+                oldEmbeds.every((oldEmb, index) => 
+                    oldEmb.description === embeds[index].data.description &&
+                    oldEmb.title === embeds[index].data.title
+                );
+
+            if (isIdentical) {
+                console.log("ℹ️ Aucun changement détecté pour le message de présentation. Message conservé.");
+                return;
+            }
+
             await existingMessage.edit({ embeds });
             console.log("✅ Message de présentation mis à jour.");
         } else {
