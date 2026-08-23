@@ -17,16 +17,12 @@ const createPartenaireEmbed = () => {
         .setTitle('Partenariats & Collaborations')
         .setDescription(
             `Dans le cadre de son expansion et de son affirmation sur la scène compétitive, **HeLoRiA** étudie activement de nouvelles opportunités de partenariat stratégique pour soutenir ses projets et accompagner ses effectifs.\n\n` +
-
             `Nous privilégions des synergies durables avec des acteurs ambitieux afin de bâtir des collaborations solides, professionnelles et mutuellement bénéfiques.\n\n` +
-
             `### ${EMOJIS.CERTIFIED} **Exigences et conditions d'affiliation**\n` +
             `• **Marques & Entreprises établies :** Nous collaborons exclusivement avec des sociétés, équipementiers et acteurs professionnels reconnus.\n` +
             `• **Politique d'exclusivité :** Nous ne réalisons aucun partenariat, affiliation ou fusion avec d'autres structures ou clans esport.\n\n` +
-
             `### ${EMOJIS.BRIEFCASE} **Vous représentez une marque ?**\n` +
             `Si vous partagez notre quête d'excellence et souhaitez associer votre image à l'ascension de **HeLoRiA**, notre direction générale se tient à votre disposition pour analyser vos propositions d'affiliation.\n\n` +
-
             `### ${EMOJIS.TICKET} **Contact professionnel**\n` +
             `Pour toute demande de dossier de sponsorisation ou proposition commerciale, veuillez ouvrir un **Ticket Partenariat** ou contacter directement l'équipe dirigeante.`
         )
@@ -36,11 +32,7 @@ const createPartenaireEmbed = () => {
         });
 };
 
-<<<<<<< HEAD
 // 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM
-=======
-// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM (UPSERT)
->>>>>>> temporary-branch
 const deployOrUpdatePartenaireEmbed = async (client) => {
     try {
         const channel = await client.channels.fetch(PARTENAIRE_CHANNEL_ID).catch(() => null);
@@ -51,17 +43,6 @@ const deployOrUpdatePartenaireEmbed = async (client) => {
         const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
 
         if (existingMessage) {
-<<<<<<< HEAD
-=======
-            const oldEmbed = existingMessage.embeds[0];
-
-            // Vérification si le contenu est déjà identique
-            if (oldEmbed && oldEmbed.title === embed.data.title && oldEmbed.description === embed.data.description) {
-                console.log("ℹ️ Aucun changement détecté pour le message des partenariats. Message conservé.");
-                return;
-            }
-
->>>>>>> temporary-branch
             await existingMessage.edit({ embeds: [embed] });
             console.log("✅ Message des partenariats mis à jour.");
         } else {

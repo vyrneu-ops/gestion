@@ -22,7 +22,7 @@ const createSoutenirEmbed = () => {
             `Chaque contribution est intégralement réallouée au développement de l'écosystème **HeLoRiA** afin de :\n\n` +
             `• **Professionnaliser l'encadrement** de nos effectifs pour garantir des performances optimales sur la scène nationale.\n` +
             `• **Sécuriser l'accès aux circuits compétitifs** majeurs et financer les engagements en tournois de haut niveau.\n` +
-            `• **Déployer des infrastructures événementielles** propriétaires (cashprizes, tournois, bootcamps).\n` +
+            `• **Déployer des infrastructures événementielles** propriétaires (Cashprizes, tournois, Bootcamps).\n` +
             `• **Subventionner la création de contenus** audiovisuels et graphiques pour accroître le rayonnement de la structure.\n\n` +
 
             `### ${EMOJIS.HANDSHAKE} **Comment participer à notre essor ?**\n` +
@@ -38,11 +38,7 @@ const createSoutenirEmbed = () => {
         });
 };
 
-<<<<<<< HEAD
 // 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM
-=======
-// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM (UPSERT)
->>>>>>> temporary-branch
 const deployOrUpdateSoutenirEmbed = async (client) => {
     try {
         const channel = await client.channels.fetch(SOUTENIR_CHANNEL_ID).catch(() => null);
@@ -53,17 +49,6 @@ const deployOrUpdateSoutenirEmbed = async (client) => {
         const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
 
         if (existingMessage) {
-<<<<<<< HEAD
-=======
-            const oldEmbed = existingMessage.embeds[0];
-
-            // Vérification si le contenu est déjà à jour
-            if (oldEmbed && oldEmbed.title === embed.data.title && oldEmbed.description === embed.data.description) {
-                console.log("ℹ️ Aucun changement détecté pour le message de soutien. Message conservé.");
-                return;
-            }
-
->>>>>>> temporary-branch
             await existingMessage.edit({ embeds: [embed] });
             console.log("✅ Message de soutien mis à jour.");
         } else {

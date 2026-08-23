@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 
-// Liste des IDs des salons d'accompagnement vocal
+// Listes des IDs des salons d'accompagnement vocal
 const VOICE_CHANNEL_IDS = [
     '1536344274638209084',
     '1536344319877849108',
@@ -22,17 +22,13 @@ const createVoiceEmbed = () => {
         .setTitle(`${EMOJIS.LOCK} Fermeture de ce salon textuel`)
         .setDescription(
             `> **Ce salon est actuellement verrouillé à l'écriture.**\n\n` +
-
-            `L'équipe de modération concentre ses interventions sur les salons textuels principaux afin de garantir un espace d'échange fluide et sécurisé. Ne pouvant assurer une surveillance continuous sur l'ensemble des salons d'accompagnement vocal, la rédaction y a été temporairement suspendue.\n\n` +
-
+            `L'équipe de modération concentre ses interventions sur les salons textuels principaux afin de garantir un espace d'échange fluide et sécurisé. Ne pouvant assurer une surveillance continue sur l'ensemble des salons d'accompagnement vocal, la rédaction y a été temporairement suspendue.\n\n` +
             `**${EMOJIS.WARNING} Pourquoi cette mesure ?**\n` +
             `› *Prévention des débordements :* Cet espace faisait trop souvent l'objet de messages inappropriés, de propos haineux ou de règlements de comptes hors cadre.\n` +
             `› *Partage d'identifiants :* L'envoi répétitif de pseudos en jeu encombrait inutilement ce canal.\n\n` +
-
             `**${EMOJIS.UPDATE} Comment procéder désormais ?**\n` +
             `› Pour partager vos pseudos (Epic Games, Discord, etc.), privilégiez le salon de discussion général ou utilisez le partage d'écran directement dans votre salon vocal.\n` +
-            `› Si l'équipe de direction décide de rouvrir cet accès à l'avenir, une annonce sera publiée pour vous en informer.\n\n` +
-
+            `› Si l'équipe de direction décide de réouvrir cet accès à l'avenir, une annonce sera publiée pour vous en informer.\n\n` +
             `*Nous vous remercions pour votre compréhension et votre collaboration.*`
         )
         .setFooter({
@@ -41,11 +37,7 @@ const createVoiceEmbed = () => {
         });
 };
 
-<<<<<<< HEAD
 // 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR MULTI-SALONS SANS SPAM
-=======
-// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR MULTI-SALONS (UPSERT)
->>>>>>> temporary-branch
 const deployOrUpdateVoiceEmbeds = async (client) => {
     for (const channelId of VOICE_CHANNEL_IDS) {
         try {
@@ -60,17 +52,6 @@ const deployOrUpdateVoiceEmbeds = async (client) => {
             const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
 
             if (existingMessage) {
-<<<<<<< HEAD
-=======
-                const oldEmbed = existingMessage.embeds[0];
-                
-                // Vérification si le contenu a changé avant d'éditer
-                if (oldEmbed && oldEmbed.title === embed.data.title && oldEmbed.description === embed.data.description) {
-                    console.log(`ℹ️ Aucun changement détecté pour le salon <#${channelId}>. Message conservé.`);
-                    continue;
-                }
-
->>>>>>> temporary-branch
                 await existingMessage.edit({ embeds: [embed] });
                 console.log(`✅ Message mis à jour dans le salon vocal <#${channelId}>`);
             } else {
