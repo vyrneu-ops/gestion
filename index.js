@@ -23,13 +23,13 @@ const ticketSystem = require('./modules/ticketSystem');
 const welcomeManager = require('./modules/welcomeManager'); 
 
 // Import des modules d'embeds
-const voiceInfo = require('./modules/voiceInfo');
-const infoPack = require('./modules/infoPack');
-const soutenir = require('./modules/soutenir');
-const partenaire = require('./modules/partenaire');
-const reglement = require('./modules/reglement');
-const presentation = require('./modules/presentation');
-const critereEsport = require('./modules/critereEsport');
+const voiceInfo = require('./embeds/voiceInfo');
+const infoPack = require('./embeds/infoPack');
+const soutenir = require('./embeds/soutenir');
+const partenaire = require('./embeds/partenaire');
+const reglement = require('./embeds/reglement');
+const presentation = require('./embeds/presentation');
+const critereEsport = require('./embeds/critereEsport');
 
 // =====================================================
 // GESTION DU STOCKAGE DES IDs DE MESSAGES
