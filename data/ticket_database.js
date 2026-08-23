@@ -1,11 +1,11 @@
 module.exports = {
-    // ID du salon où le panneau principal des tickets sera affiché
+    // 📌 ID du salon où le panneau principal des tickets sera affiché
     PANEL_CHANNEL: "1531793909871808803",
 
-    // ID du rôle temporaire pour les modérateurs en test
+    // 📌 ID du rôle temporaire pour les modérateurs en test
     TEST_MODO_ROLE: "1532014992407269386",
 
-    // IDs des catégories Discord où créer les salons de tickets
+    // 📁 IDs des catégories Discord où créer les salons de tickets
     CATEGORIES: {
         staff: "1535306833349320776",
         joueur: "1535306876164640920",
@@ -14,7 +14,7 @@ module.exports = {
         partenariat: "1535307012546498630"
     },
 
-    // IDs des rôles Staff autorisés à voir et gérer chaque type de ticket
+    // 🛡️ IDs des rôles Staff autorisés à voir et gérer chaque type de ticket
     ROLES: {
         staff: [
             "1532015048552087695", "1532015045800628244", "1532015042948628610", 

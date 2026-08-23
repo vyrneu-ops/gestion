@@ -1,47 +1,8 @@
-const { Client, GatewayIntentBits, Partials, ActivityType, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
-
-// DÉCLARATION DES EMOJIS PERSONNALISÉS
-const EMOJIS = {
-    TELESCOPE: '<:65264telescope:1537586517453832222>',
-    CROWN: '<a:darkbluecrown:1533535362566324245>',
-    QUILL: '<:6880quill:1537585310794391563>',
-    HLRWIN: '<:hlrwin:1537584105536094248>',
-    RULES: '<:580437rules:1537583160345366578>',
-    TRIALMOD: '<:94919trialmod:1537582836318609521>',
-    MIC: '<:68052micanimation:1537582247278813204>',
-    BLURPLE_MOD: '<:3446blurplecertifiedmoderator:1533535324309815367>',
-    BLURPLE_BAN: '<:9299blurpleban:1533535325996056807>',
-    TICKET: '<:29909ticket:1537580036159316108>',
-    BRIEFCASE: '<:75828briefcase:1537579702812807248>',
-    CERTIFIED: '<:20336certified:1537579306690281544>',
-    HANDSHAKE: '<:600404handshake:1537578056447828058>',
-    PAYPAL: '<:1716_PAYPAL:1537578291593093240>',
-    MONEY: '<:63043moneyspread:1537577805829636117>',
-    PREMIUM: '<:5647premiumicon:1533535330538360942>',
-    LOCK: '<a:lockicon:1533535370787033198>',
-    UPDATE: '<:update:1533535384674369777>',
-    LOADING: '<a:loadingicon:1533535386951749683>',
-    WARNING: '<:warningd:1533535400176386068>'
-};
-
-// Chargement des modules systèmes
-const voiceManager = require('./modules/voiceManager');
-const welcomeManager = require('./modules/welcomeManager');
-const roleManager = require('./modules/roleManager');
-const ticketSystem = require('./modules/ticketSystem');
-
-// Chargement des modules Embeds / Salons d'information depuis le dossier ./embeds/
-const voiceInfo = require('./embeds/voiceInfo');
-const infoPack = require('./embeds/infoPack');
-const soutenir = require('./embeds/soutenir');
-const partenaire = require('./embeds/partenaire');
-const reglement = require('./embeds/reglement');
-const presentation = require('./embeds/presentation');
-const critereEsport = require('./embeds/critereEsport');
 
 const client = new Client({
     intents: [
@@ -49,12 +10,26 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.GuildInvites,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages
     ],
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember]
 });
+
+// Import des modules fonctionnels
+const voiceManager = require('./modules/voiceManager');
+const roleManager = require('./modules/roleManager');
+const ticketSystem = require('./modules/ticketSystem');
+const welcomeManager = require('./modules/welcomeManager'); 
+
+// Import des modules d'embeds
+const voiceInfo = require('./modules/voiceInfo');
+const infoPack = require('./modules/infoPack');
+const soutenir = require('./modules/soutenir');
+const partenaire = require('./modules/partenaire');
+const reglement = require('./modules/reglement');
+const presentation = require('./modules/presentation');
+const critereEsport = require('./modules/critereEsport');
 
 // =====================================================
 // GESTION DU STOCKAGE DES IDs DE MESSAGES
@@ -100,7 +75,7 @@ async function sendOrUpdateEmbeds() {
 
     const deployEmbed = async (channelId, embedData, key) => {
         try {
-            if (!channelId || channelId.includes('ID_SALON') || channelId.includes('TON_ID')) return;
+            if (!channelId || typeof channelId !== 'string' || channelId.includes('ID_SALON') || channelId.includes('TON_ID')) return;
 
             const channel = await client.channels.fetch(channelId).catch(() => null);
             if (!channel) return;
@@ -125,20 +100,24 @@ async function sendOrUpdateEmbeds() {
         }
     };
 
-    for (let i = 0; i < voiceInfo.VOICE_CHANNEL_IDS.length; i++) {
-        await deployEmbed(voiceInfo.VOICE_CHANNEL_IDS[i], voiceInfo.createVoiceEmbed(), `Voice_Info_${i}`);
+    if (voiceInfo?.VOICE_CHANNEL_IDS && typeof voiceInfo.createVoiceEmbed === 'function') {
+        for (let i = 0; i < voiceInfo.VOICE_CHANNEL_IDS.length; i++) {
+            await deployEmbed(voiceInfo.VOICE_CHANNEL_IDS[i], voiceInfo.createVoiceEmbed(), `Voice_Info_${i}`);
+        }
     }
 
-    await deployEmbed(infoPack.INFO_CHANNEL_IDS.MAILLOT, infoPack.getMaillotEmbed(), 'InfoPack_Maillot');
-    await deployEmbed(infoPack.INFO_CHANNEL_IDS.MAP_1V1, infoPack.getMapEmbed(), 'InfoPack_Map1v1');
-    await deployEmbed(infoPack.INFO_CHANNEL_IDS.CODE_CREATEUR, infoPack.getCreatorCodeEmbed(), 'InfoPack_CodeCreateur');
-    await deployEmbed(infoPack.INFO_CHANNEL_IDS.LOI_1901, infoPack.getLoi1901Embed(), 'InfoPack_Loi1901');
+    if (infoPack?.INFO_CHANNEL_IDS) {
+        if (typeof infoPack.getMaillotEmbed === 'function') await deployEmbed(infoPack.INFO_CHANNEL_IDS.MAILLOT, infoPack.getMaillotEmbed(), 'InfoPack_Maillot');
+        if (typeof infoPack.getMapEmbed === 'function') await deployEmbed(infoPack.INFO_CHANNEL_IDS.MAP_1V1, infoPack.getMapEmbed(), 'InfoPack_Map1v1');
+        if (typeof infoPack.getCreatorCodeEmbed === 'function') await deployEmbed(infoPack.INFO_CHANNEL_IDS.CODE_CREATEUR, infoPack.getCreatorCodeEmbed(), 'InfoPack_CodeCreateur');
+        if (typeof infoPack.getLoi1901Embed === 'function') await deployEmbed(infoPack.INFO_CHANNEL_IDS.LOI_1901, infoPack.getLoi1901Embed(), 'InfoPack_Loi1901');
+    }
 
-    await deployEmbed(soutenir.SOUTENIR_CHANNEL_ID, soutenir.createSoutenirEmbed(), 'Soutenir');
-    await deployEmbed(partenaire.PARTENAIRE_CHANNEL_ID, partenaire.createPartenaireEmbed(), 'Partenaire');
-    await deployEmbed(reglement.REGLEMENT_CHANNEL_ID, reglement.createReglementEmbeds(), 'Reglement');
-    await deployEmbed(presentation.PRESENTATION_CHANNEL_ID, presentation.createPresentationEmbeds(), 'Presentation');
-    await deployEmbed(critereEsport.CRITERE_CHANNEL_ID, critereEsport.createCritereEmbeds(), 'CritereEsport');
+    if (soutenir?.SOUTENIR_CHANNEL_ID && typeof soutenir.createSoutenirEmbed === 'function') await deployEmbed(soutenir.SOUTENIR_CHANNEL_ID, soutenir.createSoutenirEmbed(), 'Soutenir');
+    if (partenaire?.PARTENAIRE_CHANNEL_ID && typeof partenaire.createPartenaireEmbed === 'function') await deployEmbed(partenaire.PARTENAIRE_CHANNEL_ID, partenaire.createPartenaireEmbed(), 'Partenaire');
+    if (reglement?.REGLEMENT_CHANNEL_ID && typeof reglement.createReglementEmbeds === 'function') await deployEmbed(reglement.REGLEMENT_CHANNEL_ID, reglement.createReglementEmbeds(), 'Reglement');
+    if (presentation?.PRESENTATION_CHANNEL_ID && typeof presentation.createPresentationEmbeds === 'function') await deployEmbed(presentation.PRESENTATION_CHANNEL_ID, presentation.createPresentationEmbeds(), 'Presentation');
+    if (critereEsport?.CRITERE_CHANNEL_ID && typeof critereEsport.createCritereEmbeds === 'function') await deployEmbed(critereEsport.CRITERE_CHANNEL_ID, critereEsport.createCritereEmbeds(), 'CritereEsport');
 
     console.log('✨ [EMBEDS] Vérification et mise à jour terminées.\n');
 }
@@ -162,9 +141,9 @@ client.once('ready', async (c) => {
 
     await sendOrUpdateEmbeds();
 
-    // Boucle de statut dynamique
+    // Statut dynamique
     let statusIndex = 0;
-    setInterval(async () => {
+    setInterval(() => {
         const totalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
         const activities = [
             { name: "CustomStatus", state: `${totalMembers} membres sur le serveur`, type: ActivityType.Custom },
@@ -184,9 +163,10 @@ client.once('ready', async (c) => {
 // SERVEUR WEB EXPRESS
 // =====================================================
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 
-app.get('/', (req, res) => res.send('⚙️ Bot HeLoRiA est en ligne !'));
-app.listen(PORT, () => console.log(`🌐 [Render WebServer] Actif sur le port ${PORT}`));
+app.get('/', (req, res) => res.send('🚨 Bot Gestion HeLoRiA — Actif'));
+app.listen(PORT, () => console.log(`🌐 [Bot Gestion] Actif sur le port ${PORT}`));
 
-client.login(process.env.DISCORD_TOKEN);
+// Supporte la clé TOKEN ou DISCORD_TOKEN
+client.login(process.env.TOKEN || process.env.DISCORD_TOKEN);

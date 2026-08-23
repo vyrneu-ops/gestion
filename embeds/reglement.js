@@ -69,7 +69,11 @@ const createReglementEmbeds = () => {
     return [embed1, embed2, embed3];
 };
 
+<<<<<<< HEAD
 // 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM
+=======
+// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM (UPSERT MULTI-EMBEDS)
+>>>>>>> temporary-branch
 const deployOrUpdateReglementEmbeds = async (client) => {
     try {
         const channel = await client.channels.fetch(REGLEMENT_CHANNEL_ID).catch(() => null);
@@ -80,6 +84,23 @@ const deployOrUpdateReglementEmbeds = async (client) => {
         const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
 
         if (existingMessage) {
+<<<<<<< HEAD
+=======
+            const oldEmbeds = existingMessage.embeds;
+            
+            // Comparaison simple pour éviter l'édition si le contenu est identique
+            const isIdentical = oldEmbeds.length === embeds.length &&
+                oldEmbeds.every((oldEmb, index) => 
+                    oldEmb.description === embeds[index].data.description &&
+                    oldEmb.title === embeds[index].data.title
+                );
+
+            if (isIdentical) {
+                console.log("ℹ️ Aucun changement détecté pour le règlement. Message conservé.");
+                return;
+            }
+
+>>>>>>> temporary-branch
             await existingMessage.edit({ embeds });
             console.log("✅ Message du règlement mis à jour.");
         } else {

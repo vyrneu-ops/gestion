@@ -74,7 +74,7 @@ module.exports = (client) => {
         if (!member) return false;
         if (member.id === config.OWNER_ID || member.guild.ownerId === member.id) return true;
         if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
-        return config.STAFF_ROLES.some(roleId => member.roles.cache.has(roleId));
+        return config.STAFF_ROLES?.some(roleId => member.roles.cache.has(roleId)) || false;
     };
 
     // Générateur d'Embed de Dashboard dynamique
@@ -108,7 +108,7 @@ module.exports = (client) => {
             if (!data.dashboardMessageId) return;
             const msg = await channel.messages.fetch(data.dashboardMessageId).catch(() => null);
             if (msg) {
-                await msg.edit({ embeds: [createDashboardEmbed(member, channel, data)] });
+                await msg.edit({ embeds: [createDashboardEmbed(member, channel, data)] }).catch(() => {});
             }
         } catch (err) {
             console.error("[VOICE] Erreur mise à jour Dashboard :", err);
@@ -117,6 +117,7 @@ module.exports = (client) => {
 
     // Purge de démarrage
     const runGarbageCollector = async (guild) => {
+        if (!config?.TEMP_CATEGORY) return 0;
         const category = await guild.channels.fetch(config.TEMP_CATEGORY).catch(() => null);
         let deletedCount = 0;
         if (category?.type === ChannelType.GuildCategory) {
@@ -238,7 +239,9 @@ module.exports = (client) => {
                     parent: config.TEMP_CATEGORY,
                     permissionOverwrites: contextPermissions,
                     userLimit: userTemplate?.userLimit || 0
-                });
+                }).catch(() => null);
+
+                if (!targetChannel) return;
 
                 const runtimeData = {
                     owner: member.id,
@@ -300,7 +303,7 @@ module.exports = (client) => {
                         content: `Bienvenue dans ton salon ${member} !`,
                         embeds: [createDashboardEmbed(member, targetChannel, runtimeData)],
                         components: [row1, row2, row3, rowLimits]
-                    });
+                    }).catch(() => null);
 
                     if (dashboardMsg) {
                         runtimeData.dashboardMessageId = dashboardMsg.id;
@@ -390,22 +393,22 @@ module.exports = (client) => {
                         await interaction.deferReply({ ephemeral: true });
                         runtimeData.isLocked = false;
                         runtimeData.isPrivate = false;
-                        await activeVoice.permissionOverwrites.edit(interaction.guild.id, { Connect: true, ViewChannel: true });
+                        await activeVoice.permissionOverwrites.edit(interaction.guild.id, { Connect: true, ViewChannel: true }).catch(() => {});
                         await updateDashboard(activeVoice, interaction.member, runtimeData);
                         return interaction.editReply({ content: `${EMOJIS.UNLOCK} Le salon est désormais public.` });
 
                     case "vc_lock":
                         await interaction.deferReply({ ephemeral: true });
                         runtimeData.isLocked = true;
-                        await activeVoice.permissionOverwrites.edit(interaction.guild.id, { Connect: false });
+                        await activeVoice.permissionOverwrites.edit(interaction.guild.id, { Connect: false }).catch(() => {});
                         await updateDashboard(activeVoice, interaction.member, runtimeData);
                         return interaction.editReply({ content: `${EMOJIS.LOCK} Le salon est désormais verrouillé aux nouveaux arrivants.` });
 
                     case "vc_private":
                         await interaction.deferReply({ ephemeral: true });
                         runtimeData.isPrivate = true;
-                        await activeVoice.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false, Connect: false });
-                        await activeVoice.permissionOverwrites.edit(interaction.user.id, { ViewChannel: true, Connect: true });
+                        await activeVoice.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false, Connect: false }).catch(() => {});
+                        await activeVoice.permissionOverwrites.edit(interaction.user.id, { ViewChannel: true, Connect: true }).catch(() => {});
                         await updateDashboard(activeVoice, interaction.member, runtimeData);
                         return interaction.editReply({ content: `${EMOJIS.HIDE} Le salon est désormais masqué et privé.` });
 
@@ -458,12 +461,12 @@ module.exports = (client) => {
                 if (!selectedUser) return interaction.editReply({ content: `${EMOJIS.WARN} Utilisateur introuvable.` });
 
                 if (interaction.customId === "user_vc_permit") {
-                    await activeVoice.permissionOverwrites.edit(selectedUser.id, { Connect: true, ViewChannel: true });
+                    await activeVoice.permissionOverwrites.edit(selectedUser.id, { Connect: true, ViewChannel: true }).catch(() => {});
                     return interaction.editReply({ content: `${EMOJIS.CHECK} ${selectedUser} est désormais autorisé à rejoindre ce salon.` });
                 }
 
                 if (interaction.customId === "user_vc_reject") {
-                    await activeVoice.permissionOverwrites.edit(selectedUser.id, { Connect: false });
+                    await activeVoice.permissionOverwrites.edit(selectedUser.id, { Connect: false }).catch(() => {});
                     const targetMember = await interaction.guild.members.fetch(selectedUser.id).catch(() => null);
                     if (targetMember?.voice.channelId === activeVoice.id) {
                         await targetMember.voice.setChannel(null).catch(() => {});
@@ -528,7 +531,11 @@ module.exports = (client) => {
                 await interaction.deferReply({ ephemeral: true });
                 const newName = interaction.fields.getTextInputValue("new_name");
                 
-                await activeVoice.setName(newName).catch(() => {});
+                const renamed = await activeVoice.setName(newName).catch(() => null);
+                if (!renamed) {
+                    return interaction.editReply({ content: `${EMOJIS.WARN} Impossible de renommer le salon pour le moment (limite de modifications Discord atteinte).` });
+                }
+                
                 await updateDashboard(activeVoice, interaction.member, runtimeData);
                 return interaction.editReply({ content: `${EMOJIS.CHECK} Salon renommé avec succès : **${newName}**` });
             }

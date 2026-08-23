@@ -23,7 +23,7 @@ const createCritereEmbeds = () => {
             `> • Performance individuelle et régularité en compétition\n` +
             `> • État d'esprit, maturité et assiduité aux entraînements\n` +
             `> • Implication active au sein de la structure\n\n` +
-            `### ${EMOJIS.RULES} BAREME D'ÉVALUATION — POWER RANKING (PR)\n` +
+            `### ${EMOJIS.RULES} BARÈME D'ÉVALUATION — POWER RANKING (PR)\n` +
             `Afin de garantir une équité parfaite dans le classement de nos effectifs, l'évaluation du niveau s'appuie sur la formule de calcul suivante :\n\n` +
             `\`\`\`text\n` +
             `PR Final = (PR EU × 0.65) + (PR Overall × 0.35)\n` +
@@ -82,22 +82,34 @@ const createCritereEmbeds = () => {
     return [embed1, embed2, embed3];
 };
 
-// 🔄 FONCTION D'ENVOI OU DE MISE À JOUR SANS NOTIFICATION
+// 🔄 FONCTION D'ENVOI OU DE MISE À JOUR SANS SPAM (UPSERT MULTI-EMBEDS)
 const deployOrUpdateCritereEmbeds = async (client) => {
     try {
-        const channel = await client.channels.fetch(CRITERE_CHANNEL_ID);
-        if (!channel) return console.error("Salon introuvable.");
+        const channel = await client.channels.fetch(CRITERE_CHANNEL_ID).catch(() => null);
+        if (!channel) return console.error(`[CRITÈRES ESPORT] Salon introuvable : ${CRITERE_CHANNEL_ID}`);
 
         const embeds = createCritereEmbeds();
-        const messages = await channel.messages.fetch({ limit: 10 });
-        const existingMessage = messages.find(m => m.author.id === client.user.id);
+        const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+        const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
 
         if (existingMessage) {
-            // Édite le message existant sans renvoyer de notification
+            const oldEmbeds = existingMessage.embeds;
+
+            // Vérification d'identité du contenu existant
+            const isIdentical = oldEmbeds.length === embeds.length &&
+                oldEmbeds.every((oldEmb, index) => 
+                    oldEmb.description === embeds[index].data.description &&
+                    oldEmb.title === embeds[index].data.title
+                );
+
+            if (isIdentical) {
+                console.log("ℹ️ Aucun changement détecté pour le message des critères. Message conservé.");
+                return;
+            }
+
             await existingMessage.edit({ embeds });
             console.log("✅ Message des critères mis à jour avec succès.");
         } else {
-            // Envoie un premier message s'il n'en existe aucun
             await channel.send({ embeds });
             console.log("✅ Nouveau message des critères envoyé.");
         }

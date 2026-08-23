@@ -1,12 +1,12 @@
 {
-    "Voice_Info_0": "",
-    "InfoPack_Maillot": "",
-    "InfoPack_Map1v1": "",
-    "InfoPack_CodeCreateur": "",
-    "InfoPack_Loi1901": "",
-    "Soutenir": "",
-    "Partenaire": "",
-    "Reglement": "",
-    "Presentation": "",
-    "CritereEsport": ""
+  "Voice_Info_0": null,
+  "InfoPack_Maillot": null,
+  "InfoPack_Map1v1": null,
+  "InfoPack_CodeCreateur": null,
+  "InfoPack_Loi1901": null,
+  "Soutenir": null,
+  "Partenaire": null,
+  "Reglement": null,
+  "Presentation": null,
+  "CritereEsport": null
 }

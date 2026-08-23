@@ -36,7 +36,11 @@ const createPartenaireEmbed = () => {
         });
 };
 
+<<<<<<< HEAD
 // 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM
+=======
+// 🔄 FONCTION AUTOMATIQUE DE MISE À JOUR SANS SPAM (UPSERT)
+>>>>>>> temporary-branch
 const deployOrUpdatePartenaireEmbed = async (client) => {
     try {
         const channel = await client.channels.fetch(PARTENAIRE_CHANNEL_ID).catch(() => null);
@@ -47,6 +51,17 @@ const deployOrUpdatePartenaireEmbed = async (client) => {
         const existingMessage = messages ? messages.find(m => m.author.id === client.user.id) : null;
 
         if (existingMessage) {
+<<<<<<< HEAD
+=======
+            const oldEmbed = existingMessage.embeds[0];
+
+            // Vérification si le contenu est déjà identique
+            if (oldEmbed && oldEmbed.title === embed.data.title && oldEmbed.description === embed.data.description) {
+                console.log("ℹ️ Aucun changement détecté pour le message des partenariats. Message conservé.");
+                return;
+            }
+
+>>>>>>> temporary-branch
             await existingMessage.edit({ embeds: [embed] });
             console.log("✅ Message des partenariats mis à jour.");
         } else {
