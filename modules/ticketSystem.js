@@ -96,7 +96,7 @@ module.exports = async (client) => {
     }
 
     // =====================================================
-    // 2. SUIVI D'ACTIVITÉ & COMMANDES CHAT
+    // 2. SUIVI D'ACTIVITE & MODO TEST
     // =====================================================
     client.on("messageCreate", async (message) => {
         if (message.author.bot || !message.guild) return;
@@ -109,17 +109,17 @@ module.exports = async (client) => {
         }
 
         if (message.content.startsWith("+test modérateur")) {
-            const allowedRoles = config.ROLES?.staff || [];
+            const allowedRoles = config.ROLES.staff || [];
             const isStaff = message.member.roles.cache.some(r => allowedRoles.includes(r.id)) || message.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
-            if (!isStaff) return message.reply("Action réservée à la direction.").catch(() => {});
+            if (!isStaff) return message.reply("Action réservée à la direction.");
 
             const targetUser = message.mentions.members.first();
-            if (!targetUser) return message.reply("Veuillez mentionner le modérateur en test.").catch(() => {});
+            if (!targetUser) return message.reply("Veuillez mentionner le modérateur en test.");
 
             await targetUser.roles.add(config.TEST_MODO_ROLE).catch(() => {});
             await message.channel.permissionOverwrites.edit(targetUser.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true }).catch(() => {});
 
-            return message.reply({ embeds: [new EmbedBuilder().setColor("#FFFFFF").setTitle("ÉVALUATION STAFF").setDescription(`Bienvenue ${targetUser} dans votre salon de test.`)] }).catch(() => {});
+            return message.reply({ embeds: [new EmbedBuilder().setColor("#FFFFFF").setTitle("ÉVALUATION STAFF").setDescription(`Bienvenue ${targetUser} dans votre salon de test.`)] });
         }
     });
 
@@ -128,7 +128,7 @@ module.exports = async (client) => {
     // =====================================================
     client.on("interactionCreate", async (i) => {
 
-        // DM REVIEWS (AVIS EN MESSAGE PRIVÉ)
+        // DM REVIEWS
         if (!i.guild) {
             const db = readDB();
 
@@ -144,13 +144,13 @@ module.exports = async (client) => {
                 modal.addComponents(new ActionRowBuilder().addComponents(
                     new TextInputBuilder().setCustomId("comment").setLabel("Votre commentaire de satisfaction").setStyle(TextInputStyle.Paragraph).setRequired(true)
                 ));
-                return i.showModal(modal).catch(() => {});
+                return i.showModal(modal);
             }
 
             if (i.isModalSubmit() && i.customId.startsWith("submit_review_")) {
                 await i.deferReply().catch(() => {});
                 const parts = i.customId.split("_");
-                const stars = parseInt(parts[2], 10);
+                const stars = parseInt(parts[2]);
                 const staffId = parts[3];
                 const comment = i.fields.getTextInputValue("comment");
 
@@ -172,19 +172,15 @@ module.exports = async (client) => {
                 const guildInstance = client.guilds.cache.first();
                 if (guildInstance) {
                     const reviewLogs = await guildInstance.channels.fetch(AVIS_CHANNEL).catch(() => null);
-                    if (reviewLogs) await reviewLogs.send({ embeds: [reviewEmbed] }).catch(() => {});
+                    if (reviewLogs) await reviewLogs.send({ embeds: [reviewEmbed] });
                 }
 
-                return i.editReply({ content: "Merci ! Votre évaluation a été transmise à l'équipe Team HeLoRiA." }).catch(() => {});
+                return i.editReply({ content: "Merci ! Votre évaluation a été transmise à l'équipe Team HeLoRiA." });
             }
             return;
         }
 
-<<<<<<< HEAD
         // ANTI-SPAM DE BOUTONS
-=======
-        // ANTI-SPAM BOUTONS ET SELECT MENU
->>>>>>> temporary-branch
         if (i.isButton() || i.isStringSelectMenu()) {
             const cooldownKey = `${i.user.id}-${i.customId}`;
             if (globalCooldowns.has(cooldownKey)) {
@@ -197,39 +193,23 @@ module.exports = async (client) => {
 
         // OUVERTURE DE TICKET
         if (i.isStringSelectMenu() && i.customId === "ticket_select") {
-<<<<<<< HEAD
-            // ACKNOWLEDGE IMMÉDIAT (Évite l'état "Le bot est en train de réfléchir")
-=======
->>>>>>> temporary-branch
             await i.deferReply({ ephemeral: true }).catch(() => {});
 
             const db = readDB();
             const type = i.values[0];
 
             if (db.blacklist.includes(i.user.id)) {
-<<<<<<< HEAD
                 return i.editReply({ content: "Vous êtes banni du système de support." });
             }
 
             try {
                 const categoryId = config.CATEGORIES[type];
-=======
-                return i.editReply({ content: "Vous êtes banni du système de support." }).catch(() => {});
-            }
-
-            try {
-                const categoryId = config.CATEGORIES?.[type];
->>>>>>> temporary-branch
                 const basePermissions = [
                     { id: i.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
                     { id: i.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }
                 ];
 
-<<<<<<< HEAD
                 (config.ROLES[type] || []).forEach(rId => {
-=======
-                (config.ROLES?.[type] || []).forEach(rId => {
->>>>>>> temporary-branch
                     basePermissions.push({ 
                         id: rId, 
                         allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] 
@@ -275,82 +255,63 @@ module.exports = async (client) => {
                     content: `Bonjour ${i.user} | @here Un nouveau dossier vient d'être ouvert.`, 
                     embeds: [formEmbed], 
                     components: [actionButtons, utilityButtons] 
-<<<<<<< HEAD
                 });
 
                 return i.editReply({ content: `Votre salon privé a été initialisé : ${ticketChannel}` });
 
             } catch (err) {
                 console.error("❌ Erreur lors de la création du ticket :", err);
-                return i.editReply({ content: "Une erreur est survenue lors de la création de votre salon privé. Veuillez réinstaller le système ou contacter un administrateur." });
-=======
-                }).catch(() => {});
-
-                return i.editReply({ content: `Votre salon privé a été initialisé : ${ticketChannel}` }).catch(() => {});
-
-            } catch (err) {
-                console.error("❌ Erreur lors de la création du ticket :", err);
-                return i.editReply({ content: "Une erreur est survenue lors de la création de votre salon privé. Veuillez contacter un administrateur." }).catch(() => {});
->>>>>>> temporary-branch
+                return i.editReply({ content: "Une erreur est survenue lors de la création de votre salon privé." });
             }
         }
 
         const db = readDB();
         const context = db.tickets[i.channel.id];
 
-<<<<<<< HEAD
-        // ACTIONS MODERATEUR ET GESTION DES BOUTONS
         const isStaffUser = context ? (config.ROLES[context.type] || []).some(rId => i.member.roles.cache.has(rId)) || i.member.permissions.has(PermissionsBitField.Flags.ManageChannels) : i.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
-=======
-        // VERIFICATION ROLES MODERATEUR
-        const isStaffUser = context 
-            ? (config.ROLES?.[context.type] || []).some(rId => i.member.roles.cache.has(rId)) || i.member.permissions.has(PermissionsBitField.Flags.ManageChannels) 
-            : i.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
->>>>>>> temporary-branch
 
         if (i.isButton() && ["ticket_add_user", "ticket_remove_user", "ticket_create_voice"].includes(i.customId)) {
-            if (!isStaffUser) return i.reply({ content: "Action réservée aux modérateurs.", ephemeral: true }).catch(() => {});
+            if (!isStaffUser) return i.reply({ content: "Action réservée aux modérateurs.", ephemeral: true });
 
             if (i.customId === "ticket_add_user" || i.customId === "ticket_remove_user") {
                 const modal = new ModalBuilder().setCustomId(`modal_user_${i.customId}`).setTitle("Gestion des permissions");
                 modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("user_id").setLabel("ID Unique du membre").setStyle(TextInputStyle.Short).setRequired(true)));
-                return i.showModal(modal).catch(() => {});
+                return i.showModal(modal);
             }
 
             if (i.customId === "ticket_create_voice") {
-                await i.deferReply().catch(() => {});
-                const voiceChannel = await i.guild.channels.create({ name: `Entretien-${i.channel.name.split("-")[1] || ""}`, type: ChannelType.GuildVoice, parent: i.channel.parentId, permissionOverwrites: i.channel.permissionOverwrites.cache.map(p => p) }).catch(() => null);
-                return i.editReply({ content: voiceChannel ? `Salon d'entretien vocal éphémère créé : ${voiceChannel}` : "Impossible de créer le salon vocal." }).catch(() => {});
+                await i.deferReply();
+                const voiceChannel = await i.guild.channels.create({ name: `Entretien-${i.channel.name.split("-")[1] || ""}`, type: ChannelType.GuildVoice, parent: i.channel.parentId, permissionOverwrites: i.channel.permissionOverwrites.cache.map(p => p) });
+                return i.editReply({ content: `Salon d'entretien vocal éphémère créé : ${voiceChannel}` });
             }
         }
 
         if (i.isModalSubmit() && i.customId.startsWith("modal_user_")) {
-            await i.deferReply({ ephemeral: true }).catch(() => {});
+            await i.deferReply({ ephemeral: true });
             const actionType = i.customId.includes("add") ? "add" : "remove";
             const targetId = i.fields.getTextInputValue("user_id");
             const targetMember = await i.guild.members.fetch(targetId).catch(() => null);
 
-            if (!targetMember) return i.editReply({ content: "Cet identifiant n'appartient pas à ce serveur." }).catch(() => {});
+            if (!targetMember) return i.editReply({ content: "Cet identifiant n'appartient pas à ce serveur." });
 
             if (actionType === "add") {
-                await i.channel.permissionOverwrites.edit(targetMember.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true }).catch(() => {});
-                await i.channel.send({ content: `${targetMember} a été ajouté à cet espace privé.` }).catch(() => {});
+                await i.channel.permissionOverwrites.edit(targetMember.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true });
+                await i.channel.send({ content: `${targetMember} a été ajouté à cet espace privé.` });
             } else {
-                await i.channel.permissionOverwrites.delete(targetMember.id).catch(() => {});
-                await i.channel.send({ content: `${targetMember} a été retiré de cet espace.` }).catch(() => {});
+                await i.channel.permissionOverwrites.delete(targetMember.id);
+                await i.channel.send({ content: `${targetMember} a été retiré de cet espace.` });
             }
-            return i.editReply({ content: "Permissions mises à jour." }).catch(() => {});
+            return i.editReply({ content: "Permissions mises à jour." });
         }
 
-        // FERMETURE & GESTION DU TICKET
         if (i.isButton() && ["claim", "close", "delete", "force_close_confirm", "cancel_close", "blacklist_user"].includes(i.customId)) {
             if (!isStaffUser && !["cancel_close"].includes(i.customId)) {
-                return i.reply({ content: "Action refusée. Droits de modération requis.", ephemeral: true }).catch(() => {});
+                return i.reply({ content: "Action refusée. Droits de modération requis.", ephemeral: true });
             }
 
             if (i.customId === "blacklist_user") {
-                if (!context) return i.reply({ content: "Impossible de cibler l'auteur.", ephemeral: true }).catch(() => {});
-                await i.reply({ content: "Application de la blacklist..." }).catch(() => {});
+                if (!context) return i.reply({ content: "Impossible de cibler l'auteur.", ephemeral: true });
+                await i.reply({ content: "Application de la blacklist..." });
 
                 db.blacklist.push(context.userId);
                 delete db.tickets[i.channel.id];
@@ -358,14 +319,14 @@ module.exports = async (client) => {
 
                 const logChannel = await i.guild.channels.fetch(LOGS_CHANNEL).catch(() => null);
                 if (logChannel) {
-                    await logChannel.send({ embeds: [new EmbedBuilder().setColor("#FFFFFF").setTitle("BLACKLIST SUPPORT").setDescription(`L'ID \`${context.userId}\` a été banni du système de support par ${i.user}.`)] }).catch(() => {});
+                    logChannel.send({ embeds: [new EmbedBuilder().setColor("#FFFFFF").setTitle("BLACKLIST SUPPORT").setDescription(`L'ID \`${context.userId}\` a été banni du système de support par ${i.user}.`)] });
                 }
 
                 return setTimeout(() => i.channel.delete().catch(() => {}), 2000);
             }
 
             if (i.customId === "claim") {
-                await i.deferUpdate().catch(() => {});
+                await i.deferUpdate();
                 db.tickets[i.channel.id].claimedBy = i.user.id; 
                 writeDB(db);
 
@@ -379,36 +340,33 @@ module.exports = async (client) => {
                     .setDisabled(true);
 
                 await i.message.edit({ components: [updatedRow, i.message.components[1]] }).catch(() => {});
-                return i.channel.send({ embeds: [new EmbedBuilder().setColor("#FFFFFF").setDescription(`**${i.user.username}** a pris en charge votre demande.`)] }).catch(() => {});
+                return i.channel.send({ embeds: [new EmbedBuilder().setColor("#FFFFFF").setDescription(`**${i.user.username}** a pris en charge votre demande.`)] });
             }
 
             if (i.customId === "close") {
-                await i.deferUpdate().catch(() => {});
+                await i.deferUpdate();
                 const confirmEmbed = new EmbedBuilder().setColor("#FFFFFF").setDescription("Voulez-vous fermer ce ticket définitivement ? Un transcript sera généré.");
                 const confirmRow = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId("force_close_confirm").setLabel("Confirmer la fermeture").setStyle(ButtonStyle.Danger),
                     new ButtonBuilder().setCustomId("cancel_close").setLabel("Annuler").setStyle(ButtonStyle.Secondary)
                 );
-                return i.channel.send({ embeds: [confirmEmbed], components: [confirmRow] }).catch(() => {});
+                return i.channel.send({ embeds: [confirmEmbed], components: [confirmRow] });
             }
 
             if (i.customId === "cancel_close") {
-                await i.deferUpdate().catch(() => {});
+                await i.deferUpdate();
                 await i.message.delete().catch(() => {});
-                return i.channel.send("Fermeture annulée.").catch(() => {});
+                return i.channel.send("Fermeture annulée.");
             }
 
             if (i.customId === "force_close_confirm" || i.customId === "delete") {
-                await i.reply("Génération du transcript en cours...").catch(() => {});
+                await i.reply("Génération du transcript en cours...");
                 return await generateSystemClose(i.channel, client, context, i.user);
             }
         }
     });
 };
 
-// =====================================================
-// FORMULAIRES (COULEUR BLANCHE #FFFFFF)
-// =====================================================
 function getFormEmbed(type) {
     const embed = new EmbedBuilder().setColor("#FFFFFF").setTimestamp();
 
@@ -448,15 +406,12 @@ function getFormEmbed(type) {
     }
 }
 
-// =====================================================
-// ARCHIVAGE ET FERMETURE
-// =====================================================
 async function generateSystemClose(channel, client, context, staffUser) {
     const filename = `transcript-${channel.id}.txt`;
     const tempPath = path.join(__dirname, filename);
 
     try {
-        const messages = await channel.messages.fetch({ limit: 100 }).catch(() => new Map());
+        const messages = await channel.messages.fetch({ limit: 100 });
         let transcriptText = `TRANSCRIPT TEAM HELORIA — SALON : ${channel.name}\n`;
         transcriptText += `Créé par : ${context ? context.username : "Inconnu"} (ID: ${context ? context.userId : "N/A"})\n`;
         transcriptText += `Clôturé par : ${staffUser ? staffUser.tag : "Système"}\n`;
@@ -478,10 +433,10 @@ async function generateSystemClose(channel, client, context, staffUser) {
             .setTimestamp();
 
         const archChan = await client.channels.fetch(ARCHIVE_CHANNEL).catch(() => null);
-        if (archChan) await archChan.send({ embeds: [summaryEmbed], files: [attachment] }).catch(() => {});
+        if (archChan) await archChan.send({ embeds: [summaryEmbed], files: [attachment] });
 
         const logChan = await client.channels.fetch(LOGS_CHANNEL).catch(() => null);
-        if (logChan) await logChan.send({ embeds: [summaryEmbed] }).catch(() => {});
+        if (logChan) await logChan.send({ embeds: [summaryEmbed] });
 
         if (context && context.userId) {
             const targetMember = await channel.guild.members.fetch(context.userId).catch(() => null);
