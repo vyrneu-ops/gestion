@@ -16,10 +16,11 @@ const fs = require("fs");
 const path = require("path");
 const config = require("../data/ticket_database");
 
-// IDS DES SALONS SYSTEME
-const LOGS_CHANNEL = "1535305443847577811";
-const ARCHIVE_CHANNEL = "1535305532620148736";
-const AVIS_CHANNEL = "1535305562714148935"; 
+// IDS DES SALONS SYSTEME (Mis à jour selon ton ordre)
+const LOGS_CHANNEL = "1535306876164640920";
+const ARCHIVE_CHANNEL = "1541230358526304256";
+const AVIS_CHANNEL = "1541544133171347710"; 
+const EXTRA_CHANNEL = "1541544174971650088"; // Réservé ou pour usage complémentaire
 
 // BASE DE DONNEES LOCALE
 const DB_PATH = path.join(__dirname, "../data/ticket_database.json");

@@ -70,6 +70,11 @@ process.on('uncaughtException', (error) => console.error('⚠️ [UNCAUGHT EXCEP
 // FONCTION DE DÉPLOIEMENT/MISE À JOUR DES EMBEDS
 // =====================================================
 async function sendOrUpdateEmbeds() {
+    // 🛑 Désactivation temporaire ou permanente des embeds
+    console.log('\n🛑 [EMBEDS] Envoi des embeds désactivé par configuration.');
+    return;
+
+    /* --- CODE D'ORIGINE DÉSACTIVÉ ---
     console.log('\n📥 [EMBEDS] Démarrage du contrôle des messages d\'information...');
     const store = loadEmbedStore();
 
@@ -120,6 +125,7 @@ async function sendOrUpdateEmbeds() {
     if (critereEsport?.CRITERE_CHANNEL_ID && typeof critereEsport.createCritereEmbeds === 'function') await deployEmbed(critereEsport.CRITERE_CHANNEL_ID, critereEsport.createCritereEmbeds(), 'CritereEsport');
 
     console.log('✨ [EMBEDS] Vérification et mise à jour terminées.\n');
+    ------------------------------------------------ */
 }
 
 // =====================================================
