@@ -16,21 +16,24 @@ const fs = require("fs");
 const path = require("path");
 const config = require("../data/ticket_database");
 
-// IDS DES SALONS SYSTEME (Mis à jour selon ton ordre)
+// SALONS SYSTÈMES (À adapter si besoin dans un fichier de config global, ou laissés ici)
 const LOGS_CHANNEL = "1535306876164640920";
 const ARCHIVE_CHANNEL = "1541230358526304256";
 const AVIS_CHANNEL = "1541544133171347710"; 
-const EXTRA_CHANNEL = "1541544174971650088"; // Réservé ou pour usage complémentaire
 
-// BASE DE DONNEES LOCALE
+// BASE DE DONNÉES LOCALE
 const DB_PATH = path.join(__dirname, "../data/ticket_database.json");
 
 if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify({ tickets: {}, blacklist: {}, stats: {} }, null, 4));
+if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify({ tickets: {}, blacklist: [], stats: {} }, null, 4));
 
 function readDB() {
     try {
-        return JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+        const data = JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+        if (!data.blacklist) data.blacklist = [];
+        if (!data.tickets) data.tickets = {};
+        if (!data.stats) data.stats = {};
+        return data;
     } catch {
         return { tickets: {}, blacklist: [], stats: {} };
     }
@@ -45,25 +48,32 @@ function writeDB(data) {
 }
 
 // =====================================================
-// FONCTION DE SÉLECTION DE CATÉGORIE DE SECOURS (BACKUP)
+// FONCTION DE SÉLECTION INTELLIGENTE DE CATÉGORIE
 // =====================================================
-async function getAvailableCategory(guild) {
-    // Si une liste de backup (CATEGORIES_POOL) existe dans la config
-    const pool = config.CATEGORIES_POOL || Object.values(config.CATEGORIES || {});
-    if (!pool || pool.length === 0) return null;
-
-    for (const catId of pool) {
-        const category = await guild.channels.fetch(catId).catch(() => null);
-        if (category && category.type === ChannelType.GuildCategory) {
-            // Compte combien de salons sont déjà dans cette catégorie (sécurité < 50 salons)
-            const childrenCount = guild.channels.cache.filter(c => c.parentId === category.id).size;
-            if (childrenCount < 50) {
-                return category.id;
+async function getCategoryForType(guild, type) {
+    // Si c'est un ticket joueur, on utilise le pool dédié avec vérification de charge (< 50 salons)
+    if (type === "joueur" && config.JOUEUR_CATEGORIES_POOL && config.JOUEUR_CATEGORIES_POOL.length > 0) {
+        for (const catId of config.JOUEUR_CATEGORIES_POOL) {
+            const category = await guild.channels.fetch(catId).catch(() => null);
+            if (category && category.type === ChannelType.GuildCategory) {
+                const childrenCount = guild.channels.cache.filter(c => c.parentId === category.id).size;
+                if (childrenCount < 50) return category.id;
             }
         }
+        return config.JOUEUR_CATEGORIES_POOL[0] || null;
     }
-    // Si tout est plein, on renvoie la première par défaut
-    return pool[0] || null;
+
+    // Pour les autres types, on récupère depuis l'objet CATEGORIES de la config
+    const catId = config.CATEGORIES?.[type];
+    if (catId) {
+        const category = await guild.channels.fetch(catId).catch(() => null);
+        if (category && category.type === ChannelType.GuildCategory) {
+            const childrenCount = guild.channels.cache.filter(c => c.parentId === category.id).size;
+            if (childrenCount < 50) return category.id;
+        }
+    }
+
+    return null;
 }
 
 const globalCooldowns = new Set();
@@ -119,7 +129,7 @@ module.exports = async (client) => {
     }
 
     // =====================================================
-    // 2. SUIVI D'ACTIVITE & MODO TEST
+    // 2. SUIVI D'ACTIVITÉ & MODÉRATEUR EN TEST
     // =====================================================
     client.on("messageCreate", async (message) => {
         if (message.author.bot || !message.guild) return;
@@ -150,16 +160,12 @@ module.exports = async (client) => {
     // 3. GESTION DES INTERACTIONS
     // =====================================================
     client.on("interactionCreate", async (i) => {
-
-        // DM REVIEWS
+        // GESTION DES AVIS EN MESSAGE PRIVÉ (DM)
         if (!i.guild) {
             const db = readDB();
 
             if (i.isButton() && i.customId.startsWith("rate_")) {
-                const parts = i.customId.split("_");
-                const stars = parts[1];
-                const staffId = parts[2];
-
+                const [, stars, staffId] = i.customId.split("_");
                 const modal = new ModalBuilder()
                     .setCustomId(`submit_review_${stars}_${staffId}`)
                     .setTitle("Votre avis sur Team HeLoRiA");
@@ -172,9 +178,8 @@ module.exports = async (client) => {
 
             if (i.isModalSubmit() && i.customId.startsWith("submit_review_")) {
                 await i.deferReply().catch(() => {});
-                const parts = i.customId.split("_");
-                const stars = parseInt(parts[2]);
-                const staffId = parts[3];
+                const [, , starsStr, staffId] = i.customId.split("_");
+                const stars = parseInt(starsStr);
                 const comment = i.fields.getTextInputValue("comment");
 
                 const reviewEmbed = new EmbedBuilder()
@@ -203,7 +208,7 @@ module.exports = async (client) => {
             return;
         }
 
-        // ANTI-SPAM DE BOUTONS
+        // ANTI-SPAM DE BOUTONS / MENUS
         if (i.isButton() || i.isStringSelectMenu()) {
             const cooldownKey = `${i.user.id}-${i.customId}`;
             if (globalCooldowns.has(cooldownKey)) {
@@ -214,7 +219,7 @@ module.exports = async (client) => {
             setTimeout(() => globalCooldowns.delete(cooldownKey), 1200);
         }
 
-        // OUVERTURE DE TICKET
+        // OUVERTURE DE TICKET VIA LE MENU DÉROULANT
         if (i.isStringSelectMenu() && i.customId === "ticket_select") {
             await i.deferReply({ ephemeral: true }).catch(() => {});
 
@@ -226,8 +231,7 @@ module.exports = async (client) => {
             }
 
             try {
-                // Utilisation du système de backup intelligent pour récupérer une catégorie valide
-                const categoryId = await getAvailableCategory(i.guild);
+                const categoryId = await getCategoryForType(i.guild, type);
 
                 const basePermissions = [
                     { id: i.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
@@ -242,7 +246,7 @@ module.exports = async (client) => {
                 });
 
                 const ticketChannel = await i.guild.channels.create({
-                    name: `${type}-${i.user.username}`,
+                    name: `${type}-${i.user.username}`.toLowerCase().replace(/[^a-z0-9-_]/g, ''),
                     type: ChannelType.GuildText,
                     parent: categoryId || null,
                     permissionOverwrites: basePermissions
@@ -256,8 +260,7 @@ module.exports = async (client) => {
                     lastActivity: Date.now(),
                     messageCount: 0,
                     status: "open",
-                    claimedBy: null,
-                    detectedPole: null
+                    claimedBy: null
                 };
                 writeDB(db);
 
@@ -293,8 +296,11 @@ module.exports = async (client) => {
         const db = readDB();
         const context = db.tickets[i.channel.id];
 
-        const isStaffUser = context ? (config.ROLES[context.type] || []).some(rId => i.member.roles.cache.has(rId)) || i.member.permissions.has(PermissionsBitField.Flags.ManageChannels) : i.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
+        const isStaffUser = context 
+            ? (config.ROLES[context.type] || []).some(rId => i.member.roles.cache.has(rId)) || i.member.permissions.has(PermissionsBitField.Flags.ManageChannels) 
+            : i.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
 
+        // GESTION DES BOUTONS UTILES DU TICKET
         if (i.isButton() && ["ticket_add_user", "ticket_remove_user", "ticket_create_voice"].includes(i.customId)) {
             if (!isStaffUser) return i.reply({ content: "Action réservée aux modérateurs.", ephemeral: true });
 
@@ -306,11 +312,17 @@ module.exports = async (client) => {
 
             if (i.customId === "ticket_create_voice") {
                 await i.deferReply();
-                const voiceChannel = await i.guild.channels.create({ name: `Entretien-${i.channel.name.split("-")[1] || ""}`, type: ChannelType.GuildVoice, parent: i.channel.parentId, permissionOverwrites: i.channel.permissionOverwrites.cache.map(p => p) });
+                const voiceChannel = await i.guild.channels.create({ 
+                    name: `Entretien-${i.channel.name}`, 
+                    type: ChannelType.GuildVoice, 
+                    parent: i.channel.parentId, 
+                    permissionOverwrites: i.channel.permissionOverwrites.cache.map(p => p) 
+                });
                 return i.editReply({ content: `Salon d'entretien vocal éphémère créé : ${voiceChannel}` });
             }
         }
 
+        // SOUMISSION DES MODALS UTILISATEURS (Ajout/Retrait)
         if (i.isModalSubmit() && i.customId.startsWith("modal_user_")) {
             await i.deferReply({ ephemeral: true });
             const actionType = i.customId.includes("add") ? "add" : "remove";
@@ -329,8 +341,9 @@ module.exports = async (client) => {
             return i.editReply({ content: "Permissions mises à jour." });
         }
 
+        // ACTIONS PRINCIPALES SUR LES TICKETS (Claim, Close, Delete, Blacklist)
         if (i.isButton() && ["claim", "close", "delete", "force_close_confirm", "cancel_close", "blacklist_user"].includes(i.customId)) {
-            if (!isStaffUser && !["cancel_close"].includes(i.customId)) {
+            if (!isStaffUser && i.customId !== "cancel_close") {
                 return i.reply({ content: "Action refusée. Droits de modération requis.", ephemeral: true });
             }
 
@@ -355,7 +368,7 @@ module.exports = async (client) => {
                 db.tickets[i.channel.id].claimedBy = i.user.id; 
                 writeDB(db);
 
-                await i.channel.setName(`prise-en-charge-${i.channel.name}`).catch(() => {});
+                await i.channel.setName(`claim-${i.channel.name}`.slice(0, 100)).catch(() => {});
                 
                 const updatedRow = ActionRowBuilder.from(i.message.components[0]);
                 updatedRow.components[0] = new ButtonBuilder()
