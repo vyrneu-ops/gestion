@@ -7,7 +7,7 @@ module.exports = {
 
     // 📁 Liste des catégories de backup (le bot essaiera la première, puis la suivante si pleine, etc.)
     CATEGORIES_POOL: [
-        "1535306833349320776", // Catégorie principale 1
+        "1535306876164640920", // Catégorie principale 1
         "1535306927591002122", // Catégorie de backup 2
         "1535306955260956822", // Catégorie de backup 3
         "1535307012546498630"  // Catégorie de backup 4
