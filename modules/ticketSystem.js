@@ -26,7 +26,7 @@ const EXTRA_CHANNEL = "1541544174971650088"; // Réservé ou pour usage complém
 const DB_PATH = path.join(__dirname, "../data/ticket_database.json");
 
 if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify({ tickets: {}, blacklist: [], stats: {} }, null, 4));
+if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify({ tickets: {}, blacklist: {}, stats: {} }, null, 4));
 
 function readDB() {
     try {
@@ -42,6 +42,28 @@ function writeDB(data) {
     } catch (err) {
         console.error("[TICKET DB ERROR] Erreur d'écriture :", err);
     }
+}
+
+// =====================================================
+// FONCTION DE SÉLECTION DE CATÉGORIE DE SECOURS (BACKUP)
+// =====================================================
+async function getAvailableCategory(guild) {
+    // Si une liste de backup (CATEGORIES_POOL) existe dans la config
+    const pool = config.CATEGORIES_POOL || Object.values(config.CATEGORIES || {});
+    if (!pool || pool.length === 0) return null;
+
+    for (const catId of pool) {
+        const category = await guild.channels.fetch(catId).catch(() => null);
+        if (category && category.type === ChannelType.GuildCategory) {
+            // Compte combien de salons sont déjà dans cette catégorie (sécurité < 50 salons)
+            const childrenCount = guild.channels.cache.filter(c => c.parentId === category.id).size;
+            if (childrenCount < 50) {
+                return category.id;
+            }
+        }
+    }
+    // Si tout est plein, on renvoie la première par défaut
+    return pool[0] || null;
 }
 
 const globalCooldowns = new Set();
@@ -204,7 +226,9 @@ module.exports = async (client) => {
             }
 
             try {
-                const categoryId = config.CATEGORIES[type];
+                // Utilisation du système de backup intelligent pour récupérer une catégorie valide
+                const categoryId = await getAvailableCategory(i.guild);
+
                 const basePermissions = [
                     { id: i.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
                     { id: i.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }

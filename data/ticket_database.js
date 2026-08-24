@@ -5,14 +5,13 @@ module.exports = {
     // 📌 ID du rôle temporaire pour les modérateurs en test
     TEST_MODO_ROLE: "1532014992407269386",
 
-    // 📁 IDs des catégories Discord où créer les salons de tickets
-    CATEGORIES: {
-        staff: "1535306833349320776",
-        joueur: "1535306876164640920",
-        audiovisuel: "1535306927591002122",
-        aide: "1535306955260956822",
-        partenariat: "1535307012546498630"
-    },
+    // 📁 Liste des catégories de backup (le bot essaiera la première, puis la suivante si pleine, etc.)
+    CATEGORIES_POOL: [
+        "1535306833349320776", // Catégorie principale 1
+        "1535306927591002122", // Catégorie de backup 2
+        "1535306955260956822", // Catégorie de backup 3
+        "1535307012546498630"  // Catégorie de backup 4
+    ],
 
     // 🛡️ IDs des rôles Staff autorisés à voir et gérer chaque type de ticket
     ROLES: {
