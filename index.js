@@ -129,6 +129,39 @@ async function sendOrUpdateEmbeds() {
 }
 
 // =====================================================
+// GESTION DU NO STREAM / INTERDICTION DE PARTAGE D'ÉCRAN
+// =====================================================
+const NO_STREAM_ROLE_ID = '1542878480482443364';
+
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    // S'assurer que le membre est bien présent dans la guilde
+    if (!newState.member) return;
+
+    const isStreaming = newState.streaming;
+    const wasStreaming = oldState.streaming;
+
+    // Détection uniquement au moment où l'utilisateur lance son partage d'écran
+    if (isStreaming && !wasStreaming) {
+        // Verification par l'ID exact du rôle
+        const hasNoStreamRole = newState.member.roles.cache.has(NO_STREAM_ROLE_ID);
+
+        if (hasNoStreamRole) {
+            try {
+                // 1. Déconnexion du membre du salon vocal pour interrompre immédiatement la diffusion
+                await newState.disconnect();
+
+                // 2. Envoi du message privé d'avertissement
+                await newState.member.send(
+                    "⚠️ **Attention :** Tu possèdes le rôle **no stream**, tu n'es donc pas autorisé à lancer un partage d'écran."
+                );
+            } catch (err) {
+                console.error(`⚠️ [NO STREAM] Erreur lors du traitement pour ${newState.member.user.tag} :`, err.message);
+            }
+        }
+    }
+});
+
+// =====================================================
 // INITIALISATION DU BOT
 // =====================================================
 client.once('ready', async (c) => {
