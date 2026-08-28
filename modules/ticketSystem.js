@@ -17,10 +17,10 @@ const fetch = require("node-fetch"); // npm i node-fetch@2
 const discordTranscripts = require("discord-html-transcripts");
 const config = require("../data/ticket_database");
 
-// --- CONFIGURATION DE VOS EMOJIS PERSONNALISÉS ---
+// --- LISTE STRICTE DES EMOJIS PERSONNALISÉS ---
 const EMOJIS = {
     warning: "<:warningd:1533535400176386068>",
-    loading: "<a:loadingicon:153353586951749683>",
+    loading: "<a:loadingicon:1533535386951749683>",
     update: "<:update:1533535384674369777>",
     lock: "<a:lockicon:1533535370787033198>",
     premium: "<:5647premiumicon:1533535330538360942>",
@@ -34,16 +34,12 @@ const EMOJIS = {
     mod: "<:3446blurplecertifiedmoderator:1533535324309815367>",
     mic: "<:68052micanimation:1537582247278813204>",
     trialmod: "<:94919trialmod:1537582836318609521>",
-    rules: "<:580437rules:1537583160345366578>",
-    win: "<:hlrwin:1537584105536094248>",
-    quill: "<:6880quill:1537585310794391563>",
-    crown: "<a:darkbluecrown:1533535362566324245>",
-    telescope: "<:65264telescope:1537586517453832222>"
+    rules: "<:580437rules:1537583160345366578>"
 };
 
 const LOGS_CHANNEL = "1535306876164640920";
 const ARCHIVE_CHANNEL = "1541230358526304256";
-const AVIS_CHANNEL = "1541544133171347710"; 
+const AVIS_CHANNEL = "1541544133171347710";
 const DB_PATH = path.join(__dirname, "../data/ticket_database.json");
 
 if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -69,7 +65,7 @@ function writeDB(data) {
     }
 }
 
-// Nettoyage de la PR V (ex: "2.5k" -> 2500)
+// Nettoyage de la saisie numérique (ex: "2.5k" -> 2500, "2 500" -> 2500)
 function cleanPRInput(input) {
     if (!input) return 0;
     let str = input.toLowerCase().trim().replace(/\s+/g, '').replace(',', '.');
@@ -82,7 +78,7 @@ function cleanPRInput(input) {
     return isNaN(parsed) ? 0 : parsed;
 }
 
-// Détermination du pôle selon la PR Finale
+// Attribution du pôle selon la PR Finale
 function getPoleInfo(prFinal) {
     if (prFinal >= 5000) return { name: "Pôle eSport Officiel", roleKey: "esport" };
     if (prFinal >= 700) return { name: "Pôle Académique", roleKey: "academique" };
@@ -95,7 +91,7 @@ function getPoleInfo(prFinal) {
     return { name: "Pôle Grinder (Grade 5)", roleKey: "grinder5" };
 }
 
-// Requête API Fortnite Tracker
+// Interrogation API Fortnite Tracker via variables d'environnement (.env)
 async function fetchFortnitePR(epicUsername) {
     const apiKey = process.env.FORTNITE_TRACKER_KEY;
     if (!apiKey) return { error: "CLÉ_API_MANQUANTE" };
@@ -149,9 +145,9 @@ async function getCategoryForType(guild, type) {
 }
 
 module.exports = async (client) => {
-    console.log("[TICKET SYSTEM] Chargement du système de support avancé...");
+    console.log("[TICKET SYSTEM] Chargement du système avec emojis personnalisés & API...");
 
-    // 1. GENERATION DU PANNEAU DE TICKETS
+    // 1. GENERATION / RAFRAÎCHISSEMENT DU PANEL PRINCIPAL
     const panelChannel = await client.channels.fetch(config.PANEL_CHANNEL).catch(() => null);
     if (panelChannel) {
         const cachedMessages = await panelChannel.messages.fetch({ limit: 10 }).catch(() => null);
@@ -162,27 +158,27 @@ module.exports = async (client) => {
 
         const panelEmbed = new EmbedBuilder()
             .setColor("#2F3136")
-            .setTitle(`${EMOJIS.crown} HUB D'ASSISTANCE — TEAM HELORIA`)
+            .setTitle(`${EMOJIS.ticket} HUB D'ASSISTANCE — TEAM HELORIA`)
             .setDescription(
                 `Bienvenue sur le centre du support officiel de la **Team HeLoRiA**.\n` +
                 `Notre équipe est à votre disposition pour vous accompagner dans vos démarches.\n\n` +
                 `${EMOJIS.rules} **Consignes d'ouverture**\n` +
-                `• Merci de remplir attentivement le formulaire lors de la sélection.\n` +
-                `• Le respect des règles reste obligatoire au sein des salons privés.\n` +
+                `• Sélectionnez votre catégorie dans le menu ci-dessous.\n` +
+                `• Cliquez sur le bouton de formulaire une fois le salon créé.\n` +
                 `• Vous disposez de 24h pour répondre aux sollicitations du staff.\n\n` +
                 `───\n\n` +
-                `Sélectionnez une option dans le menu ci-dessous.`
+                `Sélectionnez une option ci-dessous pour démarrer.`
             )
-            .setFooter({ text: "Team HeLoRiA • Centre de Support Avancé" });
+            .setFooter({ text: "Team HeLoRiA • Support Officiel" });
 
         const menuSelection = new StringSelectMenuBuilder()
             .setCustomId("ticket_select")
             .setPlaceholder("Choisissez le motif de votre demande...")
             .addOptions([
                 { label: "Recrutement Staff", description: "Rejoindre l'équipe administrative", value: "staff", emoji: EMOJIS.mod },
-                { label: "Recrutement Joueur", description: "Postuler en tant que joueur eSport", value: "joueur", emoji: EMOJIS.win },
-                { label: "Recrutement Audiovisuel", description: "Graphistes, monteurs et créateurs", value: "audiovisuel", emoji: EMOJIS.quill },
-                { label: "Assistance Générale", description: "Questions et aide technique", value: "aide", emoji: EMOJIS.ticket },
+                { label: "Recrutement Joueur", description: "Postuler en tant que joueur eSport", value: "joueur", emoji: EMOJIS.premium },
+                { label: "Recrutement Audiovisuel", description: "Graphistes, monteurs et créateurs", value: "audiovisuel", emoji: EMOJIS.mic },
+                { label: "Assistance Générale", description: "Questions et aide technique", value: "aide", emoji: EMOJIS.certified },
                 { label: "Demande de Partenariat", description: "Proposer une collaboration", value: "partenariat", emoji: EMOJIS.handshake }
             ]);
 
@@ -192,7 +188,7 @@ module.exports = async (client) => {
         }).catch(() => {});
     }
 
-    // 2. SUIVI DE L'ACTIVITE
+    // 2. SUIVI DE L'ACTIVITÉ DANS LES TICKETS
     client.on("messageCreate", async (message) => {
         if (message.author.bot || !message.guild) return;
         const db = readDB();
@@ -203,10 +199,10 @@ module.exports = async (client) => {
         }
     });
 
-    // 3. GESTION DES INTERACTIONS
+    // 3. GESTION DES INTERACTIONS (SELECTION, FORMULAIRES, BOUTONS)
     client.on("interactionCreate", async (i) => {
 
-        // GESTION DM (AVIS SOUROUSSE)
+        // AVIS MP HORS-SERVEUR
         if (!i.guild) {
             if (i.isButton() && i.customId.startsWith("rate_")) {
                 const [, stars, staffId] = i.customId.split("_");
@@ -228,11 +224,11 @@ module.exports = async (client) => {
                 const db = readDB();
 
                 const reviewEmbed = new EmbedBuilder()
-                    .setColor("#2F3136")
+                    .setColor("#FFFFFF")
                     .setTitle(`${EMOJIS.certified} Nouvel Avis Support — Team HeLoRiA`)
                     .addFields(
                         { name: "Staff Évalué", value: `<@${staffId}> (\`${staffId}\`)`, inline: true },
-                        { name: "Note globale", value: `${stars}/5 ${EMOJIS.win}`, inline: true },
+                        { name: "Note globale", value: `${stars}/5 ⭐`, inline: true },
                         { name: "Auteur", value: `${i.user} (\`${i.user.id}\`)`, inline: false },
                         { name: "Commentaire", value: comment }
                     )
@@ -248,49 +244,21 @@ module.exports = async (client) => {
                     if (reviewLogs) await reviewLogs.send({ embeds: [reviewEmbed] });
                 }
 
-                return i.editReply({ content: `${EMOJIS.certified} Merci ! Votre évaluation a bien été enregistrée.` });
+                return i.editReply({ content: "Merci ! Votre évaluation a bien été enregistrée." });
             }
             return;
         }
 
-        // SELECTION MENU TICKETS
+        // ETAPE 1 : SELECTION DE CATEGORIE ET CREATION DIRECTE DU SALON
         if (i.isStringSelectMenu() && i.customId === "ticket_select") {
             const db = readDB();
-            if (db.blacklist.includes(i.user.id)) return i.reply({ content: `${EMOJIS.ban} Vous êtes banni du système de support.`, ephemeral: true });
+            if (db.blacklist.includes(i.user.id)) return i.reply({ content: `${EMOJIS.warning} Vous êtes banni du système de support.`, ephemeral: true });
 
             const hasTicket = Object.values(db.tickets).some(t => t.userId === i.user.id && t.status === "open");
             if (hasTicket) return i.reply({ content: `${EMOJIS.warning} Vous avez déjà un ticket ouvert sur le serveur.`, ephemeral: true });
 
             const type = i.values[0];
-            const modal = new ModalBuilder().setCustomId(`create_ticket_modal_${type}`).setTitle("Formulaire de Demande");
-
-            if (type === "joueur") {
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("epic_pseudo").setLabel("Pseudo Epic Games Exact").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("prv_declared").setLabel("PR Visualisée (PRV)").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("age_platform").setLabel("Âge & Plateforme").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("motivations").setLabel("Vos motivations").setStyle(TextInputStyle.Paragraph).setRequired(true))
-                );
-            } else if (type === "staff" || type === "audiovisuel") {
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_1").setLabel("Âge & Domaine / Rôle visé").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_2").setLabel("Expériences / Portfolio (Lien)").setStyle(TextInputStyle.Paragraph).setRequired(true))
-                );
-            } else {
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_1").setLabel("Sujet de votre demande").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_2").setLabel("Description détaillée").setStyle(TextInputStyle.Paragraph).setRequired(true))
-                );
-            }
-
-            return i.showModal(modal);
-        }
-
-        // CRÉATION DU TICKET ET CALCULS PR
-        if (i.isModalSubmit() && i.customId.startsWith("create_ticket_modal_")) {
             await i.deferReply({ ephemeral: true });
-            const type = i.customId.replace("create_ticket_modal_", "");
-            const db = readDB();
 
             try {
                 const categoryId = await getCategoryForType(i.guild, type);
@@ -322,95 +290,137 @@ module.exports = async (client) => {
                 };
                 writeDB(db);
 
-                const formEmbed = new EmbedBuilder().setColor("#2F3136").setTitle(`${EMOJIS.ticket} Nouveau Ticket — ${type.toUpperCase()}`).setTimestamp();
-                
-                if (type === "joueur") {
-                    const epicPseudo = i.fields.getTextInputValue("epic_pseudo");
-                    const rawPRV = i.fields.getTextInputValue("prv_declared");
-                    const prv = cleanPRInput(rawPRV);
-                    const agePlatform = i.fields.getTextInputValue("age_platform");
-                    const motivations = i.fields.getTextInputValue("motivations");
+                // ACCUEIL DU TICKET AVEC BOUTON REMPLIR FORMULAIRE
+                const welcomeEmbed = new EmbedBuilder()
+                    .setColor("#2F3136")
+                    .setTitle(`${EMOJIS.ticket} Bienvenue dans votre Ticket`)
+                    .setDescription(
+                        `Bonjour ${i.user},\n\n` +
+                        `Veuillez cliquer sur le bouton ci-dessous **"Remplir le Formulaire"** afin de transmettre vos informations à l'équipe.\n\n` +
+                        `*Un modérateur prendra votre demande en charge sous peu.*`
+                    )
+                    .setTimestamp();
 
-                    // Vérification API
-                    const apiData = await fetchFortnitePR(epicPseudo);
-
-                    if (apiData.error) {
-                        formEmbed.setColor("#ED4245")
-                            .setDescription(`${EMOJIS.warning} **Alerte API : Impossible de vérifier les données automatiquement.**\n**Raison :** ${apiData.error}\n\nUne vérification manuelle par le staff est nécessaire.`);
-                        
-                        formEmbed.addFields(
-                            { name: "Pseudo Epic", value: epicPseudo, inline: true },
-                            { name: "PRV Saisie", value: `${prv} pts`, inline: true },
-                            { name: "Âge & Plateforme", value: agePlatform, inline: true },
-                            { name: "Motivations", value: motivations }
-                        );
-                    } else {
-                        const prEU = apiData.prEU;
-                        const prDiff = prv - prEU;
-                        const prFinal = Math.round((prEU * 0.65) + (prDiff * 0.35));
-                        const pole = getPoleInfo(prFinal);
-
-                        formEmbed.setColor("#57F287")
-                            .setDescription(`${EMOJIS.certified} **Vérification API Réussie**`)
-                            .addFields(
-                                { name: "Pseudo Epic", value: epicPseudo, inline: true },
-                                { name: "PR EU (API)", value: `${prEU} pts`, inline: true },
-                                { name: "PRV (Visualisée)", value: `${prv} pts`, inline: true },
-                                { name: "PR Différence", value: `${prDiff} pts`, inline: true },
-                                { name: `${EMOJIS.update} PR Finale Calculée`, value: `**${prFinal} pts**`, inline: true },
-                                { name: `${EMOJIS.crown} Pôle Recommandé`, value: `**${pole.name}**`, inline: true },
-                                { name: "Âge & Plateforme", value: agePlatform },
-                                { name: "Motivations", value: motivations }
-                            );
-
-                        db.tickets[ticketChannel.id].prCalculated = { prFinal, pole: pole.name, roleKey: pole.roleKey, epicPseudo };
-                        writeDB(db);
-                    }
-
-                } else {
-                    formEmbed.addFields(
-                        { name: "Informations / Sujet", value: i.fields.getTextInputValue("field_1") },
-                        { name: "Détails / Motivations", value: i.fields.getTextInputValue("field_2") }
-                    );
-                }
-
-                // BOUTONS ULTRA COMPLETS POUR LE STAFF
-                const row1 = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId("claim").setLabel("Prendre en charge").setStyle(ButtonStyle.Primary).setEmoji(EMOJIS.trialmod),
-                    new ButtonBuilder().setCustomId("create_staff_thread").setLabel("Fil Staff Privé").setStyle(ButtonStyle.Secondary).setEmoji(EMOJIS.mic),
-                    new ButtonBuilder().setCustomId("ticket_ping_user").setLabel("Relance MP").setStyle(ButtonStyle.Success).setEmoji(EMOJIS.update)
+                const rowPlayer = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`open_form_${type}`).setLabel("Remplir le Formulaire").setStyle(ButtonStyle.Success).setEmoji(EMOJIS.update),
+                    new ButtonBuilder().setCustomId("claim").setLabel("Prendre en charge").setStyle(ButtonStyle.Primary).setEmoji(EMOJIS.mod),
+                    new ButtonBuilder().setCustomId("close_with_review").setLabel("Fermer").setStyle(ButtonStyle.Danger).setEmoji(EMOJIS.lock)
                 );
 
-                const row2 = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId("close_with_review").setLabel("Fermer (Avis)").setStyle(ButtonStyle.Secondary).setEmoji(EMOJIS.lock),
-                    new ButtonBuilder().setCustomId("close_no_review").setLabel("Fermer (Sans Avis)").setStyle(ButtonStyle.Danger).setEmoji(EMOJIS.lock),
-                    new ButtonBuilder().setCustomId("blacklist_user").setLabel("Bannir Support").setStyle(ButtonStyle.Danger).setEmoji(EMOJIS.ban)
+                const rowTools = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId("ticket_ping_user").setLabel("Rappel MP").setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId("create_staff_thread").setLabel("Fil Staff").setStyle(ButtonStyle.Secondary).setEmoji(EMOJIS.mic),
+                    new ButtonBuilder().setCustomId("blacklist_user").setLabel("Blacklist").setStyle(ButtonStyle.Danger).setEmoji(EMOJIS.ban)
                 );
-
-                const components = [row1, row2];
-
-                if (type === "joueur") {
-                    const rowJoueur = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId("validate_player").setLabel("Valider & Attribuer Pôle").setStyle(ButtonStyle.Success).setEmoji(EMOJIS.certified),
-                        new ButtonBuilder().setCustomId("manual_check").setLabel("Correction Manuelle").setStyle(ButtonStyle.Secondary).setEmoji(EMOJIS.telescope)
-                    );
-                    components.push(rowJoueur);
-                }
 
                 await ticketChannel.send({
-                    content: `Bonjour ${i.user} | @here Un modérateur va prendre en charge votre demande.`,
-                    embeds: [formEmbed],
-                    components: components
+                    content: `Bienvenue ${i.user} | Staff : <@&${(config.ROLES[type] || [])[0] || i.guild.id}>`,
+                    embeds: [welcomeEmbed],
+                    components: [rowPlayer, rowTools]
                 });
 
-                return i.editReply({ content: `${EMOJIS.certified} Salon créé : ${ticketChannel}` });
+                return i.editReply({ content: `${EMOJIS.certified} Votre ticket a été créé : ${ticketChannel}` });
             } catch (err) {
                 console.error(err);
-                return i.editReply({ content: `${EMOJIS.warning} Erreur lors de la création du salon.` });
+                return i.editReply({ content: `${EMOJIS.warning} Erreur lors de la création du salon de ticket.` });
             }
         }
 
-        // EXECUTION DES BOUTONS DE GESTION STAFF
+        // ETAPE 2 : CLIC SUR "REMPLIR LE FORMULAIRE" -> OUVERTURE DU MODAL
+        if (i.isButton() && i.customId.startsWith("open_form_")) {
+            const type = i.customId.replace("open_form_", "");
+            const modal = new ModalBuilder().setCustomId(`submit_ticket_modal_${type}`).setTitle("Formulaire de Demande");
+
+            if (type === "joueur") {
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("epic_pseudo").setLabel("Pseudo Epic Games Exact").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pr_overall").setLabel("PR OVERALL (Saisie)").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("age_platform").setLabel("Âge & Plateforme").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("motivations").setLabel("Vos motivations").setStyle(TextInputStyle.Paragraph).setRequired(true))
+                );
+            } else if (type === "staff" || type === "audiovisuel") {
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_1").setLabel("Âge & Domaine / Rôle visé").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_2").setLabel("Expériences / Portfolio (Lien)").setStyle(TextInputStyle.Paragraph).setRequired(true))
+                );
+            } else {
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_1").setLabel("Sujet de votre demande").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_2").setLabel("Description détaillée").setStyle(TextInputStyle.Paragraph).setRequired(true))
+                );
+            }
+
+            return i.showModal(modal);
+        }
+
+        // ETAPE 3 : SOUMISSION DU FORMULAIRE ET TRAITEMENT API FORTNITE TRACKER
+        if (i.isModalSubmit() && i.customId.startsWith("submit_ticket_modal_")) {
+            await i.deferReply();
+            const type = i.customId.replace("submit_ticket_modal_", "");
+            const db = readDB();
+
+            const formEmbed = new EmbedBuilder().setColor("#2F3136").setTitle(`${EMOJIS.ticket} Données du Formulaire — ${type.toUpperCase()}`).setTimestamp();
+
+            if (type === "joueur") {
+                const epicPseudo = i.fields.getTextInputValue("epic_pseudo");
+                const rawPROverall = i.fields.getTextInputValue("pr_overall");
+                const prOverall = cleanPRInput(rawPROverall);
+                const agePlatform = i.fields.getTextInputValue("age_platform");
+                const motivations = i.fields.getTextInputValue("motivations");
+
+                // Interrogation API via Clé de l'environnement .env
+                const apiData = await fetchFortnitePR(epicPseudo);
+
+                if (apiData.error) {
+                    formEmbed.setColor("#ED4245")
+                        .setDescription(`${EMOJIS.warning} **Alerte API : Impossible de vérifier automatiquement.**\n**Raison :** ${apiData.error}\n\nVérification manuelle requise par le Staff.`)
+                        .addFields(
+                            { name: "Pseudo Epic", value: epicPseudo, inline: true },
+                            { name: "PR OVERALL (Déclarée)", value: `${prOverall} pts`, inline: true },
+                            { name: "Âge & Plateforme", value: agePlatform, inline: true },
+                            { name: "Motivations", value: motivations }
+                        );
+                } else {
+                    const prEU = apiData.prEU;
+                    const prDiff = prOverall - prEU;
+                    const prFinal = Math.round((prEU * 0.65) + (prDiff * 0.35));
+                    const pole = getPoleInfo(prFinal);
+
+                    formEmbed.setColor("#57F287")
+                        .setDescription(`${EMOJIS.certified} **Vérification API Fortnite Tracker Réussie**`)
+                        .addFields(
+                            { name: "Pseudo Epic", value: epicPseudo, inline: true },
+                            { name: "PR EU (API)", value: `${prEU} pts`, inline: true },
+                            { name: "PR OVERALL (Saisie)", value: `${prOverall} pts`, inline: true },
+                            { name: "Écart / Différence", value: `${prDiff} pts`, inline: true },
+                            { name: `${EMOJIS.premium} PR Finale Calculée`, value: `**${prFinal} pts**`, inline: true },
+                            { name: `${EMOJIS.briefcase} Pôle Recommandé`, value: `**${pole.name}**`, inline: true },
+                            { name: "Âge & Plateforme", value: agePlatform },
+                            { name: "Motivations", value: motivations }
+                        );
+
+                    if (db.tickets[i.channel.id]) {
+                        db.tickets[i.channel.id].prCalculated = { prFinal, pole: pole.name, roleKey: pole.roleKey, epicPseudo };
+                        writeDB(db);
+                    }
+                }
+            } else {
+                formEmbed.addFields(
+                    { name: "Informations / Sujet", value: i.fields.getTextInputValue("field_1") },
+                    { name: "Détails / Motivations", value: i.fields.getTextInputValue("field_2") }
+                );
+            }
+
+            // Options Staff pour validation / correction
+            const staffRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId("validate_player").setLabel("Valider & Attribuer Pôle").setStyle(ButtonStyle.Success).setEmoji(EMOJIS.certified),
+                new ButtonBuilder().setCustomId("manual_check").setLabel("Vérification Manuelle").setStyle(ButtonStyle.Secondary).setEmoji(EMOJIS.update)
+            );
+
+            return i.editReply({ embeds: [formEmbed], components: (type === "joueur" ? [staffRow] : []) });
+        }
+
+        // ACTIONS STAFF VIA BOUTONS
         const db = readDB();
         const context = db.tickets[i.channel.id];
         const isStaffUser = context 
@@ -418,11 +428,13 @@ module.exports = async (client) => {
             : i.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
 
         if (i.isButton()) {
-            if (!isStaffUser) return i.reply({ content: `${EMOJIS.warning} Action réservée à l'équipe de modération.`, ephemeral: true });
+            if (!isStaffUser && !i.customId.startsWith("open_form_")) {
+                return i.reply({ content: `${EMOJIS.warning} Action réservée au Staff.`, ephemeral: true });
+            }
 
-            // VALIDATION DU JOUEUR & ATTRIBUTION DU ROLE
+            // VALIDATION DU JOUEUR & ROLE AUTOMATIQUE
             if (i.customId === "validate_player") {
-                if (!context || !context.prCalculated) return i.reply({ content: `${EMOJIS.warning} Aucun calcul valide trouvé pour ce ticket.`, ephemeral: true });
+                if (!context || !context.prCalculated) return i.reply({ content: `${EMOJIS.warning} Aucun calcul valide trouvé.`, ephemeral: true });
                 
                 await i.deferReply();
                 const targetMember = await i.guild.members.fetch(context.userId).catch(() => null);
@@ -433,35 +445,35 @@ module.exports = async (client) => {
                 }
 
                 await i.channel.send({
-                    content: `${EMOJIS.win} Félicitations <@${context.userId}> ! Tu as été validé(e) dans le **${context.prCalculated.pole}** avec une PR Finale retenue de **${context.prCalculated.prFinal} pts** !`
+                    content: `${EMOJIS.certified} Félicitations <@${context.userId}> ! Tu as été validé(e) dans le **${context.prCalculated.pole}** avec une PR Finale retenue de **${context.prCalculated.prFinal} pts** !`
                 });
 
                 return i.editReply({ content: `${EMOJIS.certified} Joueur validé et rôle attribué.` });
             }
 
-            // CORRECTION MANUELLE STAFF
+            // CORRECTION / OVERRIDE MANUEL PAR LE STAFF
             if (i.customId === "manual_check") {
                 const modal = new ModalBuilder().setCustomId("manual_override_modal").setTitle("Correction Manuelle PR");
                 modal.addComponents(
                     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("manual_pr_eu").setLabel("PR EU Réelle (API/Preuve)").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("manual_prv").setLabel("PRV Corriger").setStyle(TextInputStyle.Short).setRequired(true))
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("manual_pr_overall").setLabel("PR OVERALL Corriger").setStyle(TextInputStyle.Short).setRequired(true))
                 );
                 return i.showModal(modal);
             }
 
-            // CREATION D'UN FIL PRIVEE POUR LE STAFF
+            // CREATION FIL PRIVE STAFF
             if (i.customId === "create_staff_thread") {
                 await i.deferReply({ ephemeral: true });
                 const thread = await i.channel.threads.create({
-                    name: `staff-${i.channel.name}`,
+                    name: `staff-discussion-${i.channel.name}`,
                     autoArchiveDuration: 60,
                     type: ChannelType.PrivateThread,
-                    reason: "Espace de discussion privé pour le Staff"
+                    reason: "Discussion privée Staff"
                 });
                 return i.editReply({ content: `${EMOJIS.mic} Fil de discussion privé créé : ${thread}` });
             }
 
-            // RAPPEL AUTOMATIQUE EN MP
+            // RAPPEL MEMBRE MP
             if (i.customId === "ticket_ping_user") {
                 await i.deferReply({ ephemeral: true });
                 const targetUser = await client.users.fetch(context.userId).catch(() => null);
@@ -470,51 +482,51 @@ module.exports = async (client) => {
                     await targetUser.send({
                         embeds: [new EmbedBuilder()
                             .setColor("#2F3136")
-                            .setTitle(`${EMOJIS.warning} Rappel concernant votre ticket`)
-                            .setDescription(`Un modérateur attend une réponse de votre part dans le salon ${i.channel}.`)]
+                            .setTitle(`${EMOJIS.ticket} Rappel de votre ticket`)
+                            .setDescription(`Un modérateur attend votre réponse dans le salon ${i.channel}.`)]
                     }).catch(() => {});
                 }
 
-                await i.channel.send({ content: `<@${context.userId}>, un rappel vous a été envoyé par message privé. Merci d'apporter une réponse.` });
-                return i.editReply({ content: `${EMOJIS.certified} Relance effectuée en salon et MP.` });
+                await i.channel.send({ content: `<@${context.userId}>, un rappel vous a été envoyé.` });
+                return i.editReply({ content: `${EMOJIS.certified} Relance effectuée.` });
             }
 
-            // CLAIM DU TICKET
+            // CLAIM TICKET
             if (i.customId === "claim") {
                 await i.deferUpdate();
                 db.tickets[i.channel.id].claimedBy = i.user.id;
                 writeDB(db);
 
                 await i.channel.setName(`claim-${i.channel.name}`.slice(0, 100)).catch(() => {});
-                return i.channel.send({ embeds: [new EmbedBuilder().setColor("#2F3136").setDescription(`${EMOJIS.mod} Ticket pris en charge par **${i.user.username}**.`)] });
+                return i.channel.send({ embeds: [new EmbedBuilder().setColor("#2F3136").setDescription(`${EMOJIS.mod} Pris en charge par **${i.user.username}**.`)] });
             }
 
-            // CLÔTURE DU TICKET
+            // FERMETURE TICKET
             if (i.customId === "close_with_review" || i.customId === "close_no_review") {
-                await i.reply(`${EMOJIS.lock} Clôture du ticket et génération du transcript en cours...`);
+                await i.reply(`${EMOJIS.loading} Clôture et génération du transcript en cours...`);
                 const sendReviewPrompt = (i.customId === "close_with_review");
                 return await closeTicketSystem(i.channel, client, context, i.user, sendReviewPrompt);
             }
 
-            // BAN DU SYSTEME DE SUPPORT (BLACKLIST)
+            // BLACKLIST
             if (i.customId === "blacklist_user") {
                 if (!context) return i.reply({ content: `${EMOJIS.warning} Données introuvables.`, ephemeral: true });
                 db.blacklist.push(context.userId);
                 delete db.tickets[i.channel.id];
                 writeDB(db);
 
-                await i.reply(`${EMOJIS.ban} Utilisateur ajouté à la blacklist. Fermeture immédiate du salon...`);
+                await i.reply(`${EMOJIS.ban} Utilisateur blacklisté. Suppression du salon...`);
                 setTimeout(() => i.channel.delete().catch(() => {}), 2000);
             }
         }
 
-        // TRAITEMENT DU MODAL DU RECALCUL MANUEL
+        // TRAITEMENT OVERRIDE MANUEL MODAL
         if (i.isModalSubmit() && i.customId === "manual_override_modal") {
             await i.deferReply();
             const prEU = cleanPRInput(i.fields.getTextInputValue("manual_pr_eu"));
-            const prv = cleanPRInput(i.fields.getTextInputValue("manual_prv"));
+            const prOverall = cleanPRInput(i.fields.getTextInputValue("manual_pr_overall"));
             
-            const prDiff = prv - prEU;
+            const prDiff = prOverall - prEU;
             const prFinal = Math.round((prEU * 0.65) + (prDiff * 0.35));
             const pole = getPoleInfo(prFinal);
 
@@ -524,13 +536,13 @@ module.exports = async (client) => {
             }
 
             const overrideEmbed = new EmbedBuilder()
-                .setColor("#2F3136")
+                .setColor("#FEE75C")
                 .setTitle(`${EMOJIS.update} Recalcul Manuel Effectué par le Staff`)
                 .addFields(
                     { name: "PR EU Corrigée", value: `${prEU} pts`, inline: true },
-                    { name: "PRV Corrigée", value: `${prv} pts`, inline: true },
-                    { name: `${EMOJIS.update} PR Finale Calculée`, value: `**${prFinal} pts**`, inline: true },
-                    { name: `${EMOJIS.crown} Nouveau Pôle`, value: `**${pole.name}**`, inline: true }
+                    { name: "PR OVERALL Corrigée", value: `${prOverall} pts`, inline: true },
+                    { name: `${EMOJIS.premium} PR Finale Calculée`, value: `**${prFinal} pts**`, inline: true },
+                    { name: `${EMOJIS.briefcase} Nouveau Pôle`, value: `**${pole.name}**`, inline: true }
                 );
 
             return i.editReply({ embeds: [overrideEmbed] });
@@ -565,14 +577,14 @@ async function closeTicketSystem(channel, client, context, staffUser, sendReview
             if (targetMember) {
                 const staffId = context.claimedBy || client.user.id;
                 const reviewRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`rate_5_${staffId}`).setLabel("5 Stars").setStyle(ButtonStyle.Success).setEmoji(EMOJIS.win),
-                    new ButtonBuilder().setCustomId(`rate_4_${staffId}`).setLabel("4 Stars").setStyle(ButtonStyle.Primary).setEmoji(EMOJIS.win),
-                    new ButtonBuilder().setCustomId(`rate_3_${staffId}`).setLabel("3 Stars").setStyle(ButtonStyle.Secondary).setEmoji(EMOJIS.win),
-                    new ButtonBuilder().setCustomId(`rate_2_${staffId}`).setLabel("2 Stars").setStyle(ButtonStyle.Danger).setEmoji(EMOJIS.win),
-                    new ButtonBuilder().setCustomId(`rate_1_${staffId}`).setLabel("1 Star").setStyle(ButtonStyle.Danger).setEmoji(EMOJIS.win)
+                    new ButtonBuilder().setCustomId(`rate_5_${staffId}`).setLabel("5 ⭐").setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`rate_4_${staffId}`).setLabel("4 ⭐").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`rate_3_${staffId}`).setLabel("3 ⭐").setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`rate_2_${staffId}`).setLabel("2 ⭐").setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId(`rate_1_${staffId}`).setLabel("1 ⭐").setStyle(ButtonStyle.Danger)
                 );
                 await targetMember.send({
-                    embeds: [new EmbedBuilder().setColor("#2F3136").setTitle(`${EMOJIS.crown} Évaluation — Team HeLoRiA`).setDescription("Votre ticket est désormais clos. Merci de donner votre avis sur l'assistance apportée :")],
+                    embeds: [new EmbedBuilder().setColor("#2F3136").setTitle(`${EMOJIS.certified} Évaluation — Team HeLoRiA`).setDescription("Votre ticket est désormais clos. Merci de donner votre avis sur l'aide apportée :")],
                     components: [reviewRow]
                 }).catch(() => {});
             }
