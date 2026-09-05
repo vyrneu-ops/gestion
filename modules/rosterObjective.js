@@ -1,8 +1,4 @@
-const {
-    EmbedBuilder,
-    Events
-} = require('discord.js');
-
+const { EmbedBuilder, Events } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -12,223 +8,143 @@ const path = require('path');
 
 const ROSTER_CHANNEL_ID = '1534579701421445242';
 const EMBED_COLOR = '#D4AF37';
-
 const FOOTER_TEXT = 'HeLoRiA • #RiseSoarConquer';
 
-// Fichier permettant de conserver l'ID du message
-// afin de toujours modifier le même message.
 const STORE_DIR = path.join(__dirname, '../data');
 const STORE_PATH = path.join(STORE_DIR, 'roster_objective.json');
 
 // =====================================================
-// RÔLES
+// RÔLES DU ROSTER
 // =====================================================
 
 const ROSTER_POLES = [
     {
         name: 'PÔLE CEO',
         roles: [
-            {
-                name: 'CEO',
-                id: '1532015045800628244'
-            }
+            { name: 'CEO', id: '1532015045800628244' }
         ]
     },
 
     {
         name: 'PÔLE DIRECTION',
         roles: [
-            {
-                name: 'Directeur(trice) général',
-                id: '1532015039806963763'
-            }
+            { name: 'Directeur(trice) général', id: '1532015039806963763' }
         ]
     },
 
     {
         name: 'PÔLE ADMINISTRATION',
         roles: [
-            {
-                name: 'Responsable administration',
-                id: '1532015034572738721'
-            },
-            {
-                name: 'Administrateur',
-                id: '1532015029480853625'
-            }
+            { name: 'Responsable administration', id: '1532015034572738721' },
+            { name: 'Administrateur', id: '1532015029480853625' }
         ]
     },
 
     {
         name: 'PÔLE MODÉRATION',
         roles: [
-            {
-                name: 'Responsable modération',
-                id: '1532015000426905633'
-            },
-            {
-                name: 'Modérateur',
-                id: '1532014997842952202'
-            }
+            { name: 'Responsable modération', id: '1532015000426905633' },
+            { name: 'Modérateur', id: '1532014997842952202' }
         ]
     },
 
     {
         name: 'PÔLE TEST MODÉRATEUR',
         roles: [
-            {
-                name: 'Test modérateur',
-                id: '1532014992407269386'
-            }
+            { name: 'Test modérateur', id: '1532014992407269386' }
         ]
     },
 
     {
         name: 'PÔLE FORTNITE',
         roles: [
-            {
-                name: 'Directeur(trice) Fortnite',
-                id: '1532014983305498684'
-            },
-            {
-                name: 'Manager Esports',
-                id: '1532014980063428730'
-            },
-            {
-                name: 'Coach',
-                id: '1532014976687145104'
-            }
+            { name: 'Directeur(trice) Fortnite', id: '1532014983305498684' },
+            { name: 'Manager Esports', id: '1532014980063428730' },
+            { name: 'Coach', id: '1532014976687145104' }
         ]
     },
 
     {
         name: 'PÔLE AUDIOVISUEL',
         roles: [
-            {
-                name: 'Monteur',
-                id: '1532014970210881607'
-            },
-            {
-                name: 'Graphiste',
-                id: '1532014967728115813'
-            },
-            {
-                name: 'Mapper',
-                id: '1532014964909277338'
-            },
-            {
-                name: 'Caster',
-                id: '1532014954717380798'
-            },
-            {
-                name: 'Mini-maker',
-                id: '1532014962179051590'
-            }
+            { name: 'Monteur', id: '1532014970210881607' },
+            { name: 'Graphiste', id: '1532014967728115813' },
+            { name: 'Mapper', id: '1532014964909277338' },
+            { name: 'Caster', id: '1532014954717380798' },
+            { name: 'Mini-maker', id: '1532014962179051590' }
         ]
     },
 
     {
         name: 'PÔLE WEB TV',
         roles: [
-            {
-                name: 'Régisseur(euse)',
-                id: '1532014951709802566'
-            },
-            {
-                name: 'Créateur de contenu',
-                id: '1532014948870393887'
-            },
-            {
-                name: 'Animateur(trice)',
-                id: '1532014946219458630'
-            }
+            { name: 'Régisseur(euse)', id: '1532014951709802566' },
+            { name: 'Créateur de contenu', id: '1532014948870393887' },
+            { name: 'Animateur(trice)', id: '1532014946219458630' }
         ]
     },
 
     {
         name: 'PÔLE E-SPORT',
         roles: [
-            {
-                name: 'E-sport',
-                id: '1532014940569735299'
-            }
+            { name: 'E-sport', id: '1532014940569735299' }
         ]
     },
 
     {
         name: 'PÔLE ACADÉMIQUE',
         roles: [
-            {
-                name: 'Académique',
-                id: '1532014932630044873'
-            }
+            { name: 'Académique', id: '1532014932630044873' }
         ]
     },
 
     {
         name: 'PÔLE FORMATION',
         roles: [
-            {
-                name: 'Centre de formation',
-                id: '1532014926623674573'
-            }
+            { name: 'Centre de formation', id: '1532014926623674573' }
         ]
     },
 
     {
         name: 'PÔLE ESPOIR',
         roles: [
-            {
-                name: 'Espoir',
-                id: '1532014920361574594'
-            }
+            { name: 'Espoir', id: '1532014920361574594' }
         ]
     }
 ];
 
 // =====================================================
-// GRINDERS
-// EXCLUS DE L'OBJECTIF
+// GRINDERS — EXCLUS DE L'OBJECTIF
 // =====================================================
 
-const GRINDER_ROLE_IDS = [
-    // Ajoute ici les IDs de Grinder 1 à Grinder 5
-    // lorsqu'ils seront disponibles.
-];
+const GRINDER_ROLE_IDS = [];
 
 // =====================================================
 // STOCKAGE
 // =====================================================
 
-function ensureStoreDirectory() {
+function ensureStore() {
     if (!fs.existsSync(STORE_DIR)) {
-        fs.mkdirSync(STORE_DIR, {
-            recursive: true
-        });
+        fs.mkdirSync(STORE_DIR, { recursive: true });
     }
 }
 
 function loadStore() {
-    ensureStoreDirectory();
+    ensureStore();
 
     try {
         if (fs.existsSync(STORE_PATH)) {
-            return JSON.parse(
-                fs.readFileSync(STORE_PATH, 'utf8')
-            );
+            return JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
         }
     } catch (error) {
-        console.error(
-            '[ROSTER OBJECTIVE] Erreur lecture stockage :',
-            error
-        );
+        console.error('[ROSTER] Erreur de lecture :', error);
     }
 
     return {};
 }
 
 function saveStore(data) {
-    ensureStoreDirectory();
+    ensureStore();
 
     try {
         fs.writeFileSync(
@@ -237,119 +153,80 @@ function saveStore(data) {
             'utf8'
         );
     } catch (error) {
-        console.error(
-            '[ROSTER OBJECTIVE] Erreur écriture stockage :',
-            error
-        );
+        console.error('[ROSTER] Erreur de sauvegarde :', error);
     }
 }
 
 // =====================================================
-// FORMATAGE
+// MEMBRES
 // =====================================================
 
-function formatMemberList(members) {
-    if (!members || members.size === 0) {
-        return '*Aucune personne actuellement.*';
-    }
+function getRoleMembers(guild, roleId) {
+    const role = guild.roles.cache.get(roleId);
 
-    return [...members.values()]
+    if (!role) return [];
+
+    return [...role.members.values()]
         .sort((a, b) =>
             a.displayName.localeCompare(
                 b.displayName,
                 'fr',
-                {
-                    sensitivity: 'base'
-                }
+                { sensitivity: 'base' }
             )
-        )
+        );
+}
+
+function formatMembers(members) {
+    if (members.length === 0) {
+        return '*Aucune personne actuellement.*';
+    }
+
+    return members
         .map(member => `— <@${member.id}>`)
         .join('\n');
 }
 
 // =====================================================
-// CONSTRUCTION DE L'EMBED
+// EMBED
 // =====================================================
 
-function buildRosterEmbed(guild) {
+function buildEmbed(guild) {
     const embed = new EmbedBuilder()
         .setColor(EMBED_COLOR)
         .setTitle('ROSTER OBJECTIVE')
-        .setDescription(
-            '**HeLoRiA Esport**\n' +
-            'Official staff and competitive roster overview.'
-        )
         .setFooter({
             text: FOOTER_TEXT
-        })
-        .setTimestamp();
+        });
 
     for (const pole of ROSTER_POLES) {
-
-        // Membres uniques présents dans le pôle
-        const poleMembers = new Map();
+        const uniqueMembers = new Map();
 
         for (const role of pole.roles) {
+            const members = getRoleMembers(guild, role.id);
 
-            const discordRole = guild.roles.cache.get(role.id);
-
-            if (!discordRole) {
-                console.warn(
-                    `[ROSTER OBJECTIVE] Rôle introuvable : ${role.name} (${role.id})`
-                );
-                continue;
-            }
-
-            for (const member of discordRole.members.values()) {
-                poleMembers.set(member.id, member);
+            for (const member of members) {
+                uniqueMembers.set(member.id, member);
             }
         }
 
-        const count = poleMembers.size;
+        const count = uniqueMembers.size;
+        const label = count === 1 ? 'PERSONNE' : 'PERSONNES';
 
-        const personLabel =
-            count === 1
-                ? 'PERSONNE'
-                : 'PERSONNES';
-
-        let poleContent = '';
+        let content = '';
 
         for (const role of pole.roles) {
+            const members = getRoleMembers(guild, role.id);
 
-            const discordRole = guild.roles.cache.get(role.id);
-
-            if (!discordRole) {
-                poleContent +=
-                    `**${role.name}**\n` +
-                    `*Rôle introuvable*\n\n`;
-
-                continue;
-            }
-
-            const members = new Map();
-
-            for (const member of discordRole.members.values()) {
-                members.set(member.id, member);
-            }
-
-            poleContent +=
-                `**${role.name}**\n` +
-                `${formatMemberList(members)}\n\n`;
+            content += `**${role.name}**\n`;
+            content += `${formatMembers(members)}\n\n`;
         }
-
-        // Nettoyage du dernier saut de ligne
-        poleContent = poleContent.trim();
 
         embed.addFields({
-            name: `${pole.name} — ${count} ${personLabel}`,
-            value: poleContent || '*Aucune personne actuellement.*',
+            name: `${pole.name} — ${count} ${label}`,
+            value: content.trim(),
             inline: false
         });
     }
-
-    // =================================================
-    // SECTION HORS OBJECTIF
-    // =================================================
 
     embed.addFields({
         name: 'OUTSIDE OBJECTIVE',
@@ -363,140 +240,96 @@ function buildRosterEmbed(guild) {
 }
 
 // =====================================================
-// RÉCUPÉRATION / CRÉATION DU MESSAGE
-// =====================================================
-
-async function getOrCreateRosterMessage(client, guild) {
-
-    const channel = await client.channels
-        .fetch(ROSTER_CHANNEL_ID)
-        .catch(() => null);
-
-    if (!channel) {
-        console.error(
-            `[ROSTER OBJECTIVE] Impossible de trouver le salon ${ROSTER_CHANNEL_ID}`
-        );
-        return null;
-    }
-
-    if (!channel.isTextBased()) {
-        console.error(
-            '[ROSTER OBJECTIVE] Le salon configuré n\'est pas un salon textuel.'
-        );
-        return null;
-    }
-
-    const store = loadStore();
-
-    // -------------------------------------------------
-    // Essai de récupération du message existant
-    // -------------------------------------------------
-
-    if (store.messageId) {
-
-        const existingMessage = await channel.messages
-            .fetch(store.messageId)
-            .catch(() => null);
-
-        if (existingMessage) {
-            return existingMessage;
-        }
-    }
-
-    // -------------------------------------------------
-    // Si le message n'existe plus : création
-    // -------------------------------------------------
-
-    const message = await channel.send({
-        embeds: [
-            buildRosterEmbed(guild)
-        ]
-    });
-
-    saveStore({
-        messageId: message.id,
-        channelId: channel.id
-    });
-
-    console.log(
-        `[ROSTER OBJECTIVE] Nouveau message créé : ${message.id}`
-    );
-
-    return message;
-}
-
-// =====================================================
-// MISE À JOUR DU MESSAGE
+// MISE À JOUR
 // =====================================================
 
 let updateTimeout = null;
 let updateRunning = false;
-let updateQueued = false;
 
-async function updateRosterObjective(client, guild) {
-
-    // Évite les mises à jour simultanées
-    if (updateRunning) {
-        updateQueued = true;
-        return;
-    }
+async function updateRoster(client, guild) {
+    if (updateRunning) return;
 
     updateRunning = true;
 
     try {
+        const channel = await client.channels
+            .fetch(ROSTER_CHANNEL_ID)
+            .catch(() => null);
 
-        const message =
-            await getOrCreateRosterMessage(client, guild);
+        if (!channel || !channel.isTextBased()) {
+            console.error('[ROSTER] Salon introuvable ou invalide.');
+            return;
+        }
 
-        if (!message) return;
+        const store = loadStore();
+        let message = null;
 
-        const embed = buildRosterEmbed(guild);
+        if (store.messageId) {
+            message = await channel.messages
+                .fetch(store.messageId)
+                .catch(() => null);
+        }
 
-        await message.edit({
-            embeds: [embed]
-        });
+        const embed = buildEmbed(guild);
 
-        console.log(
-            '[ROSTER OBJECTIVE] Objectif mis à jour.'
-        );
+        const membersToMention = new Set();
+
+        for (const pole of ROSTER_POLES) {
+            for (const role of pole.roles) {
+                for (const member of getRoleMembers(guild, role.id)) {
+                    membersToMention.add(member.id);
+                }
+            }
+        }
+
+        const allowedUsers = [...membersToMention];
+
+        if (message) {
+            await message.edit({
+                embeds: [embed],
+                allowedMentions: {
+                    parse: [],
+                    users: allowedUsers,
+                    roles: [],
+                    repliedUser: false
+                }
+            });
+        } else {
+            message = await channel.send({
+                embeds: [embed],
+                allowedMentions: {
+                    parse: [],
+                    users: allowedUsers,
+                    roles: [],
+                    repliedUser: false
+                }
+            });
+
+            saveStore({
+                messageId: message.id,
+                channelId: channel.id
+            });
+        }
 
     } catch (error) {
-
-        console.error(
-            '[ROSTER OBJECTIVE] Erreur mise à jour :',
-            error
-        );
-
+        console.error('[ROSTER] Erreur :', error);
     } finally {
-
         updateRunning = false;
-
-        if (updateQueued) {
-            updateQueued = false;
-
-            setTimeout(() => {
-                updateRosterObjective(client, guild);
-            }, 500);
-        }
     }
 }
 
 // =====================================================
-// DEBOUNCE
+// DÉLAI DE MISE À JOUR
 // =====================================================
 
 function scheduleUpdate(client, guild) {
-
     if (updateTimeout) {
         clearTimeout(updateTimeout);
     }
 
     updateTimeout = setTimeout(() => {
-
         updateTimeout = null;
-
-        updateRosterObjective(client, guild);
-
+        updateRoster(client, guild);
     }, 1000);
 }
 
@@ -504,125 +337,63 @@ function scheduleUpdate(client, guild) {
 // INITIALISATION
 // =====================================================
 
-module.exports = function rosterObjective(client) {
+module.exports = async function rosterObjective(client) {
 
-    console.log(
-        '[ROSTER OBJECTIVE] Initialisation du système...'
-    );
+    const channel = await client.channels
+        .fetch(ROSTER_CHANNEL_ID)
+        .catch(() => null);
 
-    // -------------------------------------------------
-    // READY
-    // -------------------------------------------------
+    if (!channel || !channel.guild) {
+        console.error('[ROSTER] Impossible de trouver le serveur.');
+        return;
+    }
 
-    client.once(Events.ClientReady, async () => {
+    const guild = channel.guild;
 
-        const guild = client.guilds.cache.find(
-            g => g.channels.cache.has(ROSTER_CHANNEL_ID)
-        );
+    // Charge les membres pour avoir les rôles à jour
+    await guild.members.fetch();
 
-        if (!guild) {
-            console.error(
-                '[ROSTER OBJECTIVE] Serveur introuvable.'
-            );
-            return;
-        }
+    // Première génération
+    await updateRoster(client, guild);
 
-        // Chargement complet des membres
-        await guild.members.fetch();
+    console.log(`[ROSTER] Système actif sur ${guild.name}.`);
 
-        await updateRosterObjective(
-            client,
-            guild
-        );
-
-        console.log(
-            `[ROSTER OBJECTIVE] Système actif sur ${guild.name}.`
-        );
-    });
-
-    // -------------------------------------------------
-    // CHANGEMENT DE RÔLE
-    // -------------------------------------------------
-
+    // Détection des changements de rôles
     client.on(
         Events.GuildMemberUpdate,
-        async (oldMember, newMember) => {
+        (oldMember, newMember) => {
 
-            // Vérification uniquement si les rôles ont changé
-            if (oldMember.roles.cache.equals(newMember.roles.cache)) {
-                return;
-            }
-
-            // Vérifie si le changement concerne un rôle du roster
-            const relevantRoleIds =
+            const relevantRoles = new Set(
                 ROSTER_POLES.flatMap(pole =>
                     pole.roles.map(role => role.id)
-                );
-
-            const oldRoles = new Set(
-                oldMember.roles.cache.keys()
+                )
             );
 
-            const newRoles = new Set(
-                newMember.roles.cache.keys()
-            );
+            const oldRoles = new Set(oldMember.roles.cache.keys());
+            const newRoles = new Set(newMember.roles.cache.keys());
 
-            const allChangedRoles = new Set([
+            const changedRoles = new Set([
                 ...oldRoles,
                 ...newRoles
             ]);
 
-            const affectsRoster =
-                [...allChangedRoles].some(
-                    roleId =>
-                        relevantRoleIds.includes(roleId)
-                );
-
-            if (!affectsRoster) {
-                return;
-            }
-
-            console.log(
-                `[ROSTER OBJECTIVE] Changement détecté pour ${newMember.user.tag}`
+            const affectsRoster = [...changedRoles].some(
+                roleId => relevantRoles.has(roleId)
             );
 
-            scheduleUpdate(
-                client,
-                newMember.guild
-            );
+            if (!affectsRoster) return;
+
+            scheduleUpdate(client, newMember.guild);
         }
     );
 
-    // -------------------------------------------------
-    // VÉRIFICATION DE SÉCURITÉ
-    // -------------------------------------------------
-
-    // Vérification périodique pour éviter qu'un changement
-    // ne soit manqué par un événement Discord.
-    //
-    // 2 secondes comme demandé initialement n'est pas
-    // recommandé car cela provoquerait énormément de
-    // requêtes Discord.
-    //
-    // Ici : vérification toutes les 30 secondes.
+    // Vérification de sécurité toutes les 30 secondes
     setInterval(async () => {
-
-        const guild = client.guilds.cache.find(
-            g => g.channels.cache.has(ROSTER_CHANNEL_ID)
-        );
-
-        if (!guild) return;
-
-        await guild.members.fetch();
-
-        await updateRosterObjective(
-            client,
-            guild
-        );
-
+        try {
+            await guild.members.fetch();
+            await updateRoster(client, guild);
+        } catch (error) {
+            console.error('[ROSTER] Vérification :', error);
+        }
     }, 30000);
-
-    console.log(
-        '[ROSTER OBJECTIVE] Surveillance des rôles activée.'
-    );
 };
