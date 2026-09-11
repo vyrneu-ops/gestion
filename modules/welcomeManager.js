@@ -7,20 +7,20 @@ const COLOR_JOIN = "#2ECC71";
 const COLOR_LEAVE = "#E74C3C";
 const COLOR_INFO = "#3498DB";
 
-// Registre d'emojis
+// Registre d'emojis personnalisés issus de ta liste
 const EMOJIS = {
     WELCOME: "<:5647premiumicon:1533535330538360942>",
     CERTIFIED: "<:20336certified:1537579306690281544>",
-    STAR: "⭐",
-    MEMBERS: "👥",
-    INVITE: "📩",
-    RULES: "📜",
-    ROLES: "🎭",
-    SUPPORT: "🎫",
-    GEAR: "⚙️",
-    JOIN: "🟢",
-    LEAVE: "🔴",
-    LINK: "🔗"
+    STAR: "<a:darkbluecrown:1533535362566324245>",
+    MEMBERS: "<:75828briefcase:153757902812807248>",
+    INVITE: "<:600404handshake:1537578056447828058>",
+    RULES: "<:580437rules:1537583160345366578>",
+    ROLES: "<:hlrwin:1537584105536094248>",
+    SUPPORT: "<:94919trialmod:1537582836318609521>",
+    GEAR: "<:65264telescope:1537586517453832222>",
+    JOIN: "<:5647premiumicon:1533535330538360942>",
+    LEAVE: "<:9299blurpleban:1533535325996056807>",
+    LINK: "<:3446blurplecertifiedmoderator:1533535324309815367>"
 };
 
 const invitesCache = new Map();
