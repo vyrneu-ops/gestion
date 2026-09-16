@@ -13,7 +13,7 @@ const {
 
 const fs = require("fs");
 const path = require("path");
-const fetch = require("node-fetch"); // npm i node-fetch@2
+const fetch = require("node-fetch");
 const discordTranscripts = require("discord-html-transcripts");
 const config = require("../data/ticket_database");
 
@@ -65,7 +65,6 @@ function writeDB(data) {
     }
 }
 
-// Nettoyage de la saisie numérique (ex: "2.5k" -> 2500, "2 500" -> 2500)
 function cleanPRInput(input) {
     if (!input) return 0;
     let str = input.toLowerCase().trim().replace(/\s+/g, '').replace(',', '.');
@@ -78,7 +77,6 @@ function cleanPRInput(input) {
     return isNaN(parsed) ? 0 : parsed;
 }
 
-// Attribution du pôle selon la PR Finale
 function getPoleInfo(prFinal) {
     if (prFinal >= 5000) return { name: "Pôle eSport Officiel", roleKey: "esport" };
     if (prFinal >= 700) return { name: "Pôle Académique", roleKey: "academique" };
@@ -91,16 +89,13 @@ function getPoleInfo(prFinal) {
     return { name: "Pôle Grinder (Grade 5)", roleKey: "grinder5" };
 }
 
-// Interrogation API Fortnite Tracker via variables d'environnement (.env)
 async function fetchFortnitePR(epicUsername) {
     const apiKey = process.env.FORTNITE_TRACKER_KEY;
     if (!apiKey) return { error: "CLÉ_API_MANQUANTE" };
 
     try {
         const url = `https://api.tracker.gg/api/v2/fortnite/standard/profile/kbm/${encodeURIComponent(epicUsername)}`;
-        const response = await fetch(url, {
-            headers: { "TRN-Api-Key": apiKey }
-        });
+        const response = await fetch(url, { headers: { "TRN-Api-Key": apiKey } });
 
         if (response.status === 404) return { error: "JOUEUR_INTROUVABLE" };
         if (!response.ok) return { error: "API_ERREUR" };
@@ -124,7 +119,7 @@ async function fetchFortnitePR(epicUsername) {
 }
 
 async function getCategoryForType(guild, type) {
-    if (type === "joueur" && config.JOUEUR_CATEGORIES_POOL?.length > 0) {
+    if ((type === "joueur" || type === "upgrade_pr") && config.JOUEUR_CATEGORIES_POOL?.length > 0) {
         for (const catId of config.JOUEUR_CATEGORIES_POOL) {
             const category = await guild.channels.fetch(catId).catch(() => null);
             if (category && category.type === ChannelType.GuildCategory) {
@@ -145,7 +140,7 @@ async function getCategoryForType(guild, type) {
 }
 
 module.exports = async (client) => {
-    console.log("[TICKET SYSTEM] Chargement du système avec emojis personnalisés & API...");
+    console.log("[TICKET SYSTEM] Chargement du système mis à jour...");
 
     // 1. GENERATION / RAFRAÎCHISSEMENT DU PANEL PRINCIPAL
     const panelChannel = await client.channels.fetch(config.PANEL_CHANNEL).catch(() => null);
@@ -164,7 +159,7 @@ module.exports = async (client) => {
                 `Notre équipe est à votre disposition pour vous accompagner dans vos démarches.\n\n` +
                 `${EMOJIS.rules} **Consignes d'ouverture**\n` +
                 `• Sélectionnez votre catégorie dans le menu ci-dessous.\n` +
-                `• Cliquez sur le bouton de formulaire une fois le salon créé.\n` +
+                `• Répondez directement aux questions dans le salon créé.\n` +
                 `• Vous disposez de 24h pour répondre aux sollicitations du staff.\n\n` +
                 `───\n\n` +
                 `Sélectionnez une option ci-dessous pour démarrer.`
@@ -176,7 +171,8 @@ module.exports = async (client) => {
             .setPlaceholder("Choisissez le motif de votre demande...")
             .addOptions([
                 { label: "Recrutement Staff", description: "Rejoindre l'équipe administrative", value: "staff", emoji: EMOJIS.mod },
-                { label: "Recrutement Joueur", description: "Postuler en tant que joueur eSport", value: "joueur", emoji: EMOJIS.premium },
+                { label: "Recrutement Joueur", description: "Postuler en tant que joueur eSport / Grinder", value: "joueur", emoji: EMOJIS.premium },
+                { label: "Augmentation PR / Grade (Réservé Joueurs)", description: "Mis à jour de votre statut Grinder/Joueur", value: "upgrade_pr", emoji: EMOJIS.update },
                 { label: "Recrutement Audiovisuel", description: "Graphistes, monteurs et créateurs", value: "audiovisuel", emoji: EMOJIS.mic },
                 { label: "Assistance Générale", description: "Questions et aide technique", value: "aide", emoji: EMOJIS.certified },
                 { label: "Demande de Partenariat", description: "Proposer une collaboration", value: "partenariat", emoji: EMOJIS.handshake }
@@ -199,7 +195,7 @@ module.exports = async (client) => {
         }
     });
 
-    // 3. GESTION DES INTERACTIONS (SELECTION, FORMULAIRES, BOUTONS)
+    // 3. GESTION DES INTERACTIONS
     client.on("interactionCreate", async (i) => {
 
         // AVIS MP HORS-SERVEUR
@@ -249,7 +245,7 @@ module.exports = async (client) => {
             return;
         }
 
-        // ETAPE 1 : SELECTION DE CATEGORIE ET CREATION DIRECTE DU SALON
+        // SELECTION DE CATEGORIE & CREATION DU SALON
         if (i.isStringSelectMenu() && i.customId === "ticket_select") {
             const db = readDB();
             if (db.blacklist.includes(i.user.id)) return i.reply({ content: `${EMOJIS.warning} Vous êtes banni du système de support.`, ephemeral: true });
@@ -290,19 +286,62 @@ module.exports = async (client) => {
                 };
                 writeDB(db);
 
-                // ACCUEIL DU TICKET AVEC BOUTON REMPLIR FORMULAIRE
+                // CONSTRUCTION DE L'EMBED SELON LA CATÉGORIE (FORMULAIRE INTÉGRÉ)
                 const welcomeEmbed = new EmbedBuilder()
                     .setColor("#2F3136")
-                    .setTitle(`${EMOJIS.ticket} Bienvenue dans votre Ticket`)
-                    .setDescription(
-                        `Bonjour ${i.user},\n\n` +
-                        `Veuillez cliquer sur le bouton ci-dessous **"Remplir le Formulaire"** afin de transmettre vos informations à l'équipe.\n\n` +
-                        `*Un modérateur prendra votre demande en charge sous peu.*`
-                    )
                     .setTimestamp();
 
-                const rowPlayer = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`open_form_${type}`).setLabel("Remplir le Formulaire").setStyle(ButtonStyle.Success).setEmoji(EMOJIS.update),
+                if (type === "joueur") {
+                    welcomeEmbed
+                        .setTitle(`${EMOJIS.ticket} Recrutement Joueur / Grinder`)
+                        .setDescription(
+                            `Bonjour ${i.user},\n\n` +
+                            `Merci d'envoyer les informations suivantes **directement dans ce salon** :\n\n` +
+                            `1️⃣ **Pseudo Epic Games Exact**\n` +
+                            `2️⃣ **PR OVERALL** (Exemple: 1.2k, 450...)\n` +
+                            `3️⃣ **Âge & Plateforme**\n` +
+                            `4️⃣ **Vos motivations**`
+                        );
+                } else if (type === "upgrade_pr") {
+                    welcomeEmbed
+                        .setTitle(`${EMOJIS.update} Demande d'Augmentation PR / Grade`)
+                        .setColor("#FEE75C")
+                        .setDescription(
+                            `Bonjour ${i.user},\n\n` +
+                            `${EMOJIS.warning} **AVERTISSEMENT STRICT :** Cette catégorie est **STRICTEMENT RÉSERVÉE** aux joueurs/grinders déjà membres de la structure (du Grade 5 au Pôle Officiel).\n` +
+                            `*Toute ouverture de ticket ici par un membre externe entraînera un **BAN IMMÉDIAT** du système de support.*\n\n` +
+                            `Veuillez transmettre :\n` +
+                            `1️⃣ **Pseudo Epic Games Exact**\n` +
+                            `2️⃣ **Nouvelle PR OVERALL atteinte**`
+                        );
+                } else if (type === "staff" || type === "audiovisuel") {
+                    welcomeEmbed
+                        .setTitle(`${EMOJIS.ticket} Candidature ${type.toUpperCase()}`)
+                        .setDescription(
+                            `Bonjour ${i.user},\n\n` +
+                            `Veuillez indiquer ci-dessous :\n` +
+                            `1️⃣ **Âge & Domaine / Rôle visé**\n` +
+                            `2️⃣ **Vos expériences & Lien vers votre portfolio**`
+                        );
+                } else {
+                    welcomeEmbed
+                        .setTitle(`${EMOJIS.ticket} Assistance — Team HeLoRiA`)
+                        .setDescription(
+                            `Bonjour ${i.user},\n\n` +
+                            `Veuillez décrire le sujet de votre demande ainsi que toutes les précisions nécessaires.`
+                        );
+                }
+
+                // BOUTONS ACTION STAFF / TICKET
+                const actionButtons = [];
+                if (type === "joueur" || type === "upgrade_pr") {
+                    actionButtons.push(
+                        new ButtonBuilder().setCustomId("trigger_check_pr").setLabel("Vérifier PR (Staff)").setStyle(ButtonStyle.Success).setEmoji(EMOJIS.certified)
+                    );
+                }
+
+                const row1 = new ActionRowBuilder().addComponents(
+                    ...actionButtons,
                     new ButtonBuilder().setCustomId("claim").setLabel("Prendre en charge").setStyle(ButtonStyle.Primary).setEmoji(EMOJIS.mod),
                     new ButtonBuilder().setCustomId("close_with_review").setLabel("Fermer").setStyle(ButtonStyle.Danger).setEmoji(EMOJIS.lock)
                 );
@@ -316,7 +355,7 @@ module.exports = async (client) => {
                 await ticketChannel.send({
                     content: `Bienvenue ${i.user} | Staff : <@&${(config.ROLES[type] || [])[0] || i.guild.id}>`,
                     embeds: [welcomeEmbed],
-                    components: [rowPlayer, rowTools]
+                    components: [row1, rowTools]
                 });
 
                 return i.editReply({ content: `${EMOJIS.certified} Votre ticket a été créé : ${ticketChannel}` });
@@ -326,101 +365,7 @@ module.exports = async (client) => {
             }
         }
 
-        // ETAPE 2 : CLIC SUR "REMPLIR LE FORMULAIRE" -> OUVERTURE DU MODAL
-        if (i.isButton() && i.customId.startsWith("open_form_")) {
-            const type = i.customId.replace("open_form_", "");
-            const modal = new ModalBuilder().setCustomId(`submit_ticket_modal_${type}`).setTitle("Formulaire de Demande");
-
-            if (type === "joueur") {
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("epic_pseudo").setLabel("Pseudo Epic Games Exact").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pr_overall").setLabel("PR OVERALL (Saisie)").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("age_platform").setLabel("Âge & Plateforme").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("motivations").setLabel("Vos motivations").setStyle(TextInputStyle.Paragraph).setRequired(true))
-                );
-            } else if (type === "staff" || type === "audiovisuel") {
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_1").setLabel("Âge & Domaine / Rôle visé").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_2").setLabel("Expériences / Portfolio (Lien)").setStyle(TextInputStyle.Paragraph).setRequired(true))
-                );
-            } else {
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_1").setLabel("Sujet de votre demande").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("field_2").setLabel("Description détaillée").setStyle(TextInputStyle.Paragraph).setRequired(true))
-                );
-            }
-
-            return i.showModal(modal);
-        }
-
-        // ETAPE 3 : SOUMISSION DU FORMULAIRE ET TRAITEMENT API FORTNITE TRACKER
-        if (i.isModalSubmit() && i.customId.startsWith("submit_ticket_modal_")) {
-            await i.deferReply();
-            const type = i.customId.replace("submit_ticket_modal_", "");
-            const db = readDB();
-
-            const formEmbed = new EmbedBuilder().setColor("#2F3136").setTitle(`${EMOJIS.ticket} Données du Formulaire — ${type.toUpperCase()}`).setTimestamp();
-
-            if (type === "joueur") {
-                const epicPseudo = i.fields.getTextInputValue("epic_pseudo");
-                const rawPROverall = i.fields.getTextInputValue("pr_overall");
-                const prOverall = cleanPRInput(rawPROverall);
-                const agePlatform = i.fields.getTextInputValue("age_platform");
-                const motivations = i.fields.getTextInputValue("motivations");
-
-                // Interrogation API via Clé de l'environnement .env
-                const apiData = await fetchFortnitePR(epicPseudo);
-
-                if (apiData.error) {
-                    formEmbed.setColor("#ED4245")
-                        .setDescription(`${EMOJIS.warning} **Alerte API : Impossible de vérifier automatiquement.**\n**Raison :** ${apiData.error}\n\nVérification manuelle requise par le Staff.`)
-                        .addFields(
-                            { name: "Pseudo Epic", value: epicPseudo, inline: true },
-                            { name: "PR OVERALL (Déclarée)", value: `${prOverall} pts`, inline: true },
-                            { name: "Âge & Plateforme", value: agePlatform, inline: true },
-                            { name: "Motivations", value: motivations }
-                        );
-                } else {
-                    const prEU = apiData.prEU;
-                    const prDiff = prOverall - prEU;
-                    const prFinal = Math.round((prEU * 0.65) + (prDiff * 0.35));
-                    const pole = getPoleInfo(prFinal);
-
-                    formEmbed.setColor("#57F287")
-                        .setDescription(`${EMOJIS.certified} **Vérification API Fortnite Tracker Réussie**`)
-                        .addFields(
-                            { name: "Pseudo Epic", value: epicPseudo, inline: true },
-                            { name: "PR EU (API)", value: `${prEU} pts`, inline: true },
-                            { name: "PR OVERALL (Saisie)", value: `${prOverall} pts`, inline: true },
-                            { name: "Écart / Différence", value: `${prDiff} pts`, inline: true },
-                            { name: `${EMOJIS.premium} PR Finale Calculée`, value: `**${prFinal} pts**`, inline: true },
-                            { name: `${EMOJIS.briefcase} Pôle Recommandé`, value: `**${pole.name}**`, inline: true },
-                            { name: "Âge & Plateforme", value: agePlatform },
-                            { name: "Motivations", value: motivations }
-                        );
-
-                    if (db.tickets[i.channel.id]) {
-                        db.tickets[i.channel.id].prCalculated = { prFinal, pole: pole.name, roleKey: pole.roleKey, epicPseudo };
-                        writeDB(db);
-                    }
-                }
-            } else {
-                formEmbed.addFields(
-                    { name: "Informations / Sujet", value: i.fields.getTextInputValue("field_1") },
-                    { name: "Détails / Motivations", value: i.fields.getTextInputValue("field_2") }
-                );
-            }
-
-            // Options Staff pour validation / correction
-            const staffRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId("validate_player").setLabel("Valider & Attribuer Pôle").setStyle(ButtonStyle.Success).setEmoji(EMOJIS.certified),
-                new ButtonBuilder().setCustomId("manual_check").setLabel("Vérification Manuelle").setStyle(ButtonStyle.Secondary).setEmoji(EMOJIS.update)
-            );
-
-            return i.editReply({ embeds: [formEmbed], components: (type === "joueur" ? [staffRow] : []) });
-        }
-
-        // ACTIONS STAFF VIA BOUTONS
+        // ACTIONS BOUTONS STAFF
         const db = readDB();
         const context = db.tickets[i.channel.id];
         const isStaffUser = context 
@@ -428,11 +373,21 @@ module.exports = async (client) => {
             : i.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
 
         if (i.isButton()) {
-            if (!isStaffUser && !i.customId.startsWith("open_form_")) {
+            if (!isStaffUser) {
                 return i.reply({ content: `${EMOJIS.warning} Action réservée au Staff.`, ephemeral: true });
             }
 
-            // VALIDATION DU JOUEUR & ROLE AUTOMATIQUE
+            // MODAL DE VÉRIFICATION DE PR PAR LE STAFF
+            if (i.customId === "trigger_check_pr") {
+                const modal = new ModalBuilder().setCustomId("process_pr_check").setTitle("Vérification & Calcul PR");
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("epic_pseudo").setLabel("Pseudo Epic Games Exact").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pr_overall").setLabel("PR OVERALL (Déclarée)").setStyle(TextInputStyle.Short).setRequired(true))
+                );
+                return i.showModal(modal);
+            }
+
+            // VALIDATION ET ATTRIBUTION DU RÔLE
             if (i.customId === "validate_player") {
                 if (!context || !context.prCalculated) return i.reply({ content: `${EMOJIS.warning} Aucun calcul valide trouvé.`, ephemeral: true });
                 
@@ -451,101 +406,97 @@ module.exports = async (client) => {
                 return i.editReply({ content: `${EMOJIS.certified} Joueur validé et rôle attribué.` });
             }
 
-            // CORRECTION / OVERRIDE MANUEL PAR LE STAFF
-            if (i.customId === "manual_check") {
-                const modal = new ModalBuilder().setCustomId("manual_override_modal").setTitle("Correction Manuelle PR");
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("manual_pr_eu").setLabel("PR EU Réelle (API/Preuve)").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("manual_pr_overall").setLabel("PR OVERALL Corriger").setStyle(TextInputStyle.Short).setRequired(true))
-                );
-                return i.showModal(modal);
-            }
-
-            // CREATION FIL PRIVE STAFF
+            // AUTRES COMMANDES STAFF (Fil, Rappel, Claim, Clôture, Blacklist)
             if (i.customId === "create_staff_thread") {
                 await i.deferReply({ ephemeral: true });
                 const thread = await i.channel.threads.create({
-                    name: `staff-discussion-${i.channel.name}`,
+                    name: `staff-${i.channel.name}`,
                     autoArchiveDuration: 60,
                     type: ChannelType.PrivateThread,
                     reason: "Discussion privée Staff"
                 });
-                return i.editReply({ content: `${EMOJIS.mic} Fil de discussion privé créé : ${thread}` });
+                return i.editReply({ content: `${EMOJIS.mic} Fil privé créé : ${thread}` });
             }
 
-            // RAPPEL MEMBRE MP
             if (i.customId === "ticket_ping_user") {
                 await i.deferReply({ ephemeral: true });
                 const targetUser = await client.users.fetch(context.userId).catch(() => null);
-
                 if (targetUser) {
                     await targetUser.send({
-                        embeds: [new EmbedBuilder()
-                            .setColor("#2F3136")
-                            .setTitle(`${EMOJIS.ticket} Rappel de votre ticket`)
-                            .setDescription(`Un modérateur attend votre réponse dans le salon ${i.channel}.`)]
+                        embeds: [new EmbedBuilder().setColor("#2F3136").setTitle(`${EMOJIS.ticket} Rappel ticket`).setDescription(`Un modérateur vous attend dans ${i.channel}.`)]
                     }).catch(() => {});
                 }
-
                 await i.channel.send({ content: `<@${context.userId}>, un rappel vous a été envoyé.` });
                 return i.editReply({ content: `${EMOJIS.certified} Relance effectuée.` });
             }
 
-            // CLAIM TICKET
             if (i.customId === "claim") {
                 await i.deferUpdate();
                 db.tickets[i.channel.id].claimedBy = i.user.id;
                 writeDB(db);
-
                 await i.channel.setName(`claim-${i.channel.name}`.slice(0, 100)).catch(() => {});
                 return i.channel.send({ embeds: [new EmbedBuilder().setColor("#2F3136").setDescription(`${EMOJIS.mod} Pris en charge par **${i.user.username}**.`)] });
             }
 
-            // FERMETURE TICKET
             if (i.customId === "close_with_review" || i.customId === "close_no_review") {
-                await i.reply(`${EMOJIS.loading} Clôture et génération du transcript en cours...`);
-                const sendReviewPrompt = (i.customId === "close_with_review");
-                return await closeTicketSystem(i.channel, client, context, i.user, sendReviewPrompt);
+                await i.reply(`${EMOJIS.loading} Clôture en cours...`);
+                return await closeTicketSystem(i.channel, client, context, i.user, (i.customId === "close_with_review"));
             }
 
-            // BLACKLIST
             if (i.customId === "blacklist_user") {
                 if (!context) return i.reply({ content: `${EMOJIS.warning} Données introuvables.`, ephemeral: true });
                 db.blacklist.push(context.userId);
                 delete db.tickets[i.channel.id];
                 writeDB(db);
-
-                await i.reply(`${EMOJIS.ban} Utilisateur blacklisté. Suppression du salon...`);
+                await i.reply(`${EMOJIS.ban} Utilisateur blacklisté. Suppression...`);
                 setTimeout(() => i.channel.delete().catch(() => {}), 2000);
             }
         }
 
-        // TRAITEMENT OVERRIDE MANUEL MODAL
-        if (i.isModalSubmit() && i.customId === "manual_override_modal") {
+        // TRAITEMENT DU CALCUL DE PR (SOUMIS PAR LE STAFF)
+        if (i.isModalSubmit() && i.customId === "process_pr_check") {
             await i.deferReply();
-            const prEU = cleanPRInput(i.fields.getTextInputValue("manual_pr_eu"));
-            const prOverall = cleanPRInput(i.fields.getTextInputValue("manual_pr_overall"));
-            
-            const prDiff = prOverall - prEU;
-            const prFinal = Math.round((prEU * 0.65) + (prDiff * 0.35));
-            const pole = getPoleInfo(prFinal);
+            const epicPseudo = i.fields.getTextInputValue("epic_pseudo");
+            const rawPROverall = i.fields.getTextInputValue("pr_overall");
+            const prOverall = cleanPRInput(rawPROverall);
 
-            if (context) {
-                context.prCalculated = { prFinal, pole: pole.name, roleKey: pole.roleKey };
-                writeDB(db);
+            const apiData = await fetchFortnitePR(epicPseudo);
+            const formEmbed = new EmbedBuilder().setTimestamp();
+
+            if (apiData.error) {
+                formEmbed.setColor("#ED4245")
+                    .setDescription(`${EMOJIS.warning} **Erreur API : ${apiData.error}**\nCalcul basé uniquement sur la PR Déclarée.`)
+                    .addFields(
+                        { name: "Pseudo Epic", value: epicPseudo, inline: true },
+                        { name: "PR OVERALL Saisie", value: `${prOverall} pts`, inline: true }
+                    );
+            } else {
+                const prEU = apiData.prEU;
+                const prDiff = prOverall - prEU;
+                const prFinal = Math.round((prEU * 0.65) + (prDiff * 0.35));
+                const pole = getPoleInfo(prFinal);
+
+                formEmbed.setColor("#57F287")
+                    .setTitle(`${EMOJIS.certified} Résultat du Calcul de PR`)
+                    .addFields(
+                        { name: "Pseudo Epic", value: epicPseudo, inline: true },
+                        { name: "PR EU (API)", value: `${prEU} pts`, inline: true },
+                        { name: "PR OVERALL", value: `${prOverall} pts`, inline: true },
+                        { name: `${EMOJIS.premium} PR Finale Calculée`, value: `**${prFinal} pts**`, inline: true },
+                        { name: `${EMOJIS.briefcase} Pôle Recommandé`, value: `**${pole.name}**`, inline: true }
+                    );
+
+                if (db.tickets[i.channel.id]) {
+                    db.tickets[i.channel.id].prCalculated = { prFinal, pole: pole.name, roleKey: pole.roleKey, epicPseudo };
+                    writeDB(db);
+                }
             }
 
-            const overrideEmbed = new EmbedBuilder()
-                .setColor("#FEE75C")
-                .setTitle(`${EMOJIS.update} Recalcul Manuel Effectué par le Staff`)
-                .addFields(
-                    { name: "PR EU Corrigée", value: `${prEU} pts`, inline: true },
-                    { name: "PR OVERALL Corrigée", value: `${prOverall} pts`, inline: true },
-                    { name: `${EMOJIS.premium} PR Finale Calculée`, value: `**${prFinal} pts**`, inline: true },
-                    { name: `${EMOJIS.briefcase} Nouveau Pôle`, value: `**${pole.name}**`, inline: true }
-                );
+            const staffRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId("validate_player").setLabel("Valider & Attribuer Pôle").setStyle(ButtonStyle.Success).setEmoji(EMOJIS.certified)
+            );
 
-            return i.editReply({ embeds: [overrideEmbed] });
+            return i.editReply({ embeds: [formEmbed], components: [staffRow] });
         }
     });
 };
