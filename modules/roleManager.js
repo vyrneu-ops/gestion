@@ -23,11 +23,11 @@ const EMOJIS = {
     MIC_ANIM: "<:68052micanimation:1537582247278813204>"
 };
 
-// Variable d'état de la maintenance du module
-let isMaintenanceActive = false;
+// Variable d'état de la maintenance (initialisée à true pour être active au lancement)
+let isMaintenanceActive = true;
 
 module.exports = (client) => {
-    console.log("[ROLE SYSTEM] Module d'auto-rôle HeLoRiA prêt.");
+    console.log("[ROLE SYSTEM] Module d'auto-rôle HeLoRiA prêt (Maintenance activée par défaut).");
 
     // =====================================================
     // COMMANDES TEXTUELLES (+setup-roles et +maintenance-roles)

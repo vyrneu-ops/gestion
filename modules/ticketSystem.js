@@ -19,16 +19,19 @@ const EMOJIS = {
     mod: "<:3446blurplecertifiedmoderator:1533535324309815367>",
     premium: "<:5647premiumicon:1533535330538360942>",
     update: "<:update:1533535384674369777>",
-    mic: "<:68052micanimation:1537582247278813204>"
+    mic: "<:68052micanimation:1537582247278813204>",
+    handshake: "🤝"
 };
 
 function readDB() {
     try {
         const data = JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
-        if (data.maintenance === undefined) data.maintenance = false;
+        // Force la maintenance à true au démarrage
+        data.maintenance = true;
         return data;
     } catch {
-        return { tickets: {}, blacklist: [], stats: {}, maintenance: false };
+        // En cas de création du fichier, maintenance activée par défaut
+        return { tickets: {}, blacklist: [], stats: {}, maintenance: true };
     }
 }
 
@@ -58,7 +61,7 @@ async function refreshPanelMessage(client, isMaintenance) {
             .setColor("#ED4245")
             .setTitle(`${EMOJIS.lock} SUPPORT EN MAINTENANCE — TEAM HELORIA`)
             .setDescription(
-                `Le centre de support de la **Team HeLoRiA** est actuellement **fermé pour maintenance**.\n\n` +
+                `Le centre de support de la **Team HeLoRiA** est actuellement **fermée pour maintenance**.\n\n` +
                 `${EMOJIS.warning} **Information**\n` +
                 `• La création de nouveaux tickets est temporairement suspendue.\n` +
                 `• Nos équipes effectuent une mise à jour ou des opérations d'entretien.\n` +
@@ -104,41 +107,53 @@ async function refreshPanelMessage(client, isMaintenance) {
     }
 }
 
-module.exports = {
-    /**
-     * Commande d'activation / désactivation de la maintenance
-     * Exemples d'utilisation dans une commande : 
-     * await maintenanceModule.toggleMaintenance(message.member, client, true);
-     */
-    async toggleMaintenance(member, client, state = null) {
-        if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return { success: false, message: `${EMOJIS.warning} Vous devez être administrateur pour exécuter cette commande.` };
+module.exports = function ticketSystem(client) {
+    console.log("[TICKET SYSTEM] Module initialisé en mode MAINTENANCE AUTOMATIQUE.");
+    
+    // Forcer la sauvegarde de l'état de maintenance et la mise à jour du panel
+    const db = readDB();
+    writeDB(db);
+    refreshPanelMessage(client, true);
+
+    // Écouteur des interactions (tickets / boutons / menus)
+    client.on("interactionCreate", async (interaction) => {
+        if (!interaction.isStringSelectMenu() && !interaction.isButton()) return;
+
+        // Bloquer l'accès si c'est une interaction liée au système de ticket
+        if (interaction.customId.startsWith("ticket_")) {
+            return interaction.reply({
+                content: `${EMOJIS.warning} Le support est actuellement en **maintenance**. Impossible de créer ou gérer un ticket pour le moment.`,
+                ephemeral: true
+            });
         }
-
-        const db = readDB();
-        const newState = (state !== null) ? state : !db.maintenance;
-        
-        db.maintenance = newState;
-        writeDB(db);
-
-        await refreshPanelMessage(client, newState);
-
-        return {
-            success: true,
-            state: newState,
-            message: newState 
-                ? `${EMOJIS.lock} La maintenance du support a été **activée**. Les nouveaux tickets sont bloqués.` 
-                : `${EMOJIS.certified} La maintenance du support a été **désactivée**. Le hub a été restauré.`
-        };
-    },
-
-    /**
-     * Vérification à intégrer au début de l'événement interactionCreate
-     */
-    checkMaintenance(interaction) {
-        const db = readDB();
-        return db.maintenance;
-    },
-
-    refreshPanelMessage
+    });
 };
+
+module.exports.toggleMaintenance = async function(member, client, state = null) {
+    if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return { success: false, message: `${EMOJIS.warning} Vous devez être administrateur pour exécuter cette commande.` };
+    }
+
+    const db = readDB();
+    const newState = (state !== null) ? state : !db.maintenance;
+    
+    db.maintenance = newState;
+    writeDB(db);
+
+    await refreshPanelMessage(client, newState);
+
+    return {
+        success: true,
+        state: newState,
+        message: newState 
+            ? `${EMOJIS.lock} La maintenance du support a été **activée**. Les nouveaux tickets sont bloqués.` 
+            : `${EMOJIS.certified} La maintenance du support a été **désactivée**. Le hub a été restauré.`
+    };
+};
+
+module.exports.checkMaintenance = function(interaction) {
+    const db = readDB();
+    return db.maintenance;
+};
+
+module.exports.refreshPanelMessage = refreshPanelMessage;

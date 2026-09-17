@@ -100,17 +100,13 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     const isStreaming = newState.streaming;
     const wasStreaming = oldState.streaming;
 
-    // Détection uniquement au lancement du partage d'écran
     if (isStreaming && !wasStreaming) {
         const hasNoStreamRole = newState.member.roles.cache.has(NO_STREAM_ROLE_ID);
 
         if (!hasNoStreamRole) return;
 
         try {
-            // Déconnexion immédiate du salon vocal
             await newState.disconnect();
-
-            // Envoi du message privé (avec sécurité si les MP du membre sont fermés)
             await newState.member.send(
                 'Attention : tu possèdes le rôle **no stream**, tu n\'es donc pas autorisé à lancer un partage d\'écran.'
             ).catch(() => console.log(`[NO STREAM] Impossible d'envoyer un MP à ${newState.member.user.tag}.`));
@@ -131,20 +127,29 @@ client.once('ready', async (c) => {
     console.log('==========================================\n');
 
     // CHARGEMENT DES MODULES
-    try {
-        if (typeof voiceManager === 'function') voiceManager(client);
-        if (typeof welcomeManager === 'function') welcomeManager(client);
-        if (typeof roleManager === 'function') roleManager(client);
-        if (typeof ticketSystem === 'function') ticketSystem(client);
-        if (typeof rosterObjective === 'function') rosterObjective(client);
-    } catch (err) {
-        console.error('[MODULE ERROR] Erreur au chargement des modules :', err);
+    const modules = [
+        { name: 'voiceManager', fn: voiceManager },
+        { name: 'welcomeManager', fn: welcomeManager },
+        { name: 'roleManager', fn: roleManager },
+        { name: 'ticketSystem', fn: ticketSystem },
+        { name: 'rosterObjective', fn: rosterObjective }
+    ];
+
+    for (const mod of modules) {
+        try {
+            if (typeof mod.fn === 'function') {
+                mod.fn(client);
+                console.log(`[MODULES] Module ${mod.name} chargé.`);
+            }
+        } catch (err) {
+            console.error(`[MODULE ERROR] Erreur au chargement du module ${mod.name} :`, err);
+        }
     }
 
     // EMBEDS
     await sendOrUpdateEmbeds();
 
-    // STATUT DYNAMIQUE
+    // STATUT DYNAMIQUE (Affichage statut Maintenance)
     let statusIndex = 0;
 
     setInterval(() => {
@@ -153,19 +158,19 @@ client.once('ready', async (c) => {
         const activities = [
             {
                 name: 'CustomStatus',
-                state: `${totalMembers} membres sur le serveur`,
+                state: '🔴 Bot actuellement en maintenance',
                 type: ActivityType.Custom
             },
             {
                 name: 'CustomStatus',
-                state: 'Dev By Logs',
+                state: `${totalMembers} membres • HeLoRiA`,
                 type: ActivityType.Custom
             }
         ];
 
         client.user.setPresence({
             activities: [activities[statusIndex]],
-            status: 'idle'
+            status: 'dnd' // Statut 'Ne pas déranger' (rouge) pour indiquer la maintenance
         });
 
         statusIndex = (statusIndex + 1) % activities.length;
@@ -180,7 +185,7 @@ const app = express();
 const PORT = process.env.PORT || 3002;
 
 app.get('/', (req, res) => {
-    res.send('Bot Gestion HeLoRiA — Actif');
+    res.send('Bot Gestion HeLoRiA — Mode Maintenance Actif');
 });
 
 app.listen(PORT, () => {
