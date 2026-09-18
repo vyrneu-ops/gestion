@@ -13,7 +13,7 @@ const COLOR_GOLD = "#D4AF37";
 const COLOR_DARK = "#0F0F0F";
 const COLOR_ERROR = "#2F0000";
 
-// Emojis personnalisés HeLoRiA (Conservés à 100%)
+// Emojis personnalisés HeLoRiA
 const EMOJIS = {
     HLR_WIN: "<:hlrwin:1537584105536094248>",
     PREMIUM: "<:5647premiumicon:1533535330538360942>",
@@ -35,7 +35,7 @@ module.exports = (client) => {
         if (msg.content === "+setup-roles") {
             try {
                 if (!msg.member || !msg.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                    return msg.reply("❌ **Seuls les administrateurs peuvent exécuter cette commande.**").catch(() => {});
+                    return await msg.reply("❌ **Seuls les administrateurs peuvent exécuter cette commande.**").catch(() => {});
                 }
 
                 await msg.delete().catch(() => {});
@@ -170,7 +170,6 @@ module.exports = (client) => {
             try {
                 await interaction.deferUpdate().catch(() => {});
 
-                // Pattern: cf_role_[y/n]_[cat]_[val]_[roleId]
                 const parts = interaction.customId.split("_");
                 const isYes = parts[2] === "y";
                 const category = parts[3];
@@ -186,7 +185,7 @@ module.exports = (client) => {
                     if (category === "plt") categoryConfig = config.ROLES_PLATEFORME;
                     if (category === "div") categoryConfig = config.ROLES_DIVISION;
 
-                    // Retrait sécurisé des anciens rôles de la même catégorie
+                    // Retrait sécurisé des anciens rôles
                     if (categoryConfig) {
                         for (const key in categoryConfig) {
                             const id = categoryConfig[key];
@@ -211,7 +210,7 @@ module.exports = (client) => {
                         .setDescription("Votre changement de rôle a bien été effectué et enregistré.")
                         .setFooter({ text: "HeLoRiA • Système de Profil" });
 
-                    return interaction.editReply({ embeds: [successEmbed], components: [] }).catch(() => {});
+                    return await interaction.editReply({ embeds: [successEmbed], components: [] }).catch(() => {});
                 } else {
                     const cancelEmbed = new EmbedBuilder()
                         .setColor(COLOR_DARK)
@@ -219,7 +218,7 @@ module.exports = (client) => {
                         .setDescription("Votre rôle actuel a été conservé sans modification.")
                         .setFooter({ text: "HeLoRiA • Système de Profil" });
 
-                    return interaction.editReply({ embeds: [cancelEmbed], components: [] }).catch(() => {});
+                    return await interaction.editReply({ embeds: [cancelEmbed], components: [] }).catch(() => {});
                 }
             } catch (err) {
                 console.error("[ROLE SYSTEM] Erreur lors du clic sur bouton de confirmation :", err);
@@ -239,7 +238,6 @@ module.exports = (client) => {
 
             if (!member) return;
 
-            // Fonction de réponse rapide stylisée
             const sendResponseEmbed = async (title, statusText, isSuccess = true) => {
                 const responseEmbed = new EmbedBuilder()
                     .setColor(isSuccess ? COLOR_GOLD : COLOR_ERROR)
@@ -247,10 +245,9 @@ module.exports = (client) => {
                     .setDescription(statusText)
                     .setFooter({ text: "HeLoRiA • Système de Profil" });
 
-                return interaction.editReply({ embeds: [responseEmbed], components: [] }).catch(() => {});
+                return await interaction.editReply({ embeds: [responseEmbed], components: [] }).catch(() => {});
             };
 
-            // Fonction de demande de confirmation par bouton
             const askConfirmation = async (categoryShort, currentRoleName, targetRoleId) => {
                 const confirmEmbed = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
@@ -274,13 +271,13 @@ module.exports = (client) => {
                         .setStyle(ButtonStyle.Danger)
                 );
 
-                return interaction.editReply({ embeds: [confirmEmbed], components: [confirmButtons] }).catch(() => {});
+                return await interaction.editReply({ embeds: [confirmEmbed], components: [confirmButtons] }).catch(() => {});
             };
 
-            // 1. DÉROULANT : GENRE
+            // 1. GENRE
             if (interaction.customId === "role_select_genre") {
                 if (!config.ROLES_GENRE) {
-                    return sendResponseEmbed("Configuration Manquante", "La configuration des rôles de genre est introuvable.", false);
+                    return await sendResponseEmbed("Configuration Manquante", "La configuration des rôles de genre est introuvable.", false);
                 }
 
                 const roleId = config.ROLES_GENRE[selectedValue];
@@ -295,10 +292,9 @@ module.exports = (client) => {
                 }
 
                 if (existingRole && existingRole.id !== roleId) {
-                    return askConfirmation("gnr", existingRole.name, roleId);
+                    return await askConfirmation("gnr", existingRole.name, roleId);
                 }
 
-                // Retrait des anciens rôles
                 for (const key in config.ROLES_GENRE) {
                     const id = config.ROLES_GENRE[key];
                     if (id && member.roles.cache.has(id)) {
@@ -310,18 +306,18 @@ module.exports = (client) => {
                     await member.roles.add(roleId).catch(() => {});
                 }
 
-                return sendResponseEmbed("Profil Mis à Jour", "Votre genre a été enregistré avec succès.", true);
+                return await sendResponseEmbed("Profil Mis à Jour", "Votre genre a été enregistré avec succès.", true);
             }
 
-            // 2. DÉROULANT : PLATEFORME
+            // 2. PLATEFORME
             if (interaction.customId === "role_select_plateforme") {
                 if (!config.ROLES_PLATEFORME) {
-                    return sendResponseEmbed("Configuration Manquante", "La configuration des plateformes est introuvable.", false);
+                    return await sendResponseEmbed("Configuration Manquante", "La configuration des plateformes est introuvable.", false);
                 }
 
                 const roleId = config.ROLES_PLATEFORME[selectedValue];
                 if (!roleId || roleId.startsWith("ID_")) {
-                    return sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas encore configuré dans les fichiers du bot.", false);
+                    return await sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas encore configuré dans les fichiers du bot.", false);
                 }
 
                 let existingRole = null;
@@ -334,7 +330,7 @@ module.exports = (client) => {
                 }
 
                 if (existingRole && existingRole.id !== roleId) {
-                    return askConfirmation("plt", existingRole.name, roleId);
+                    return await askConfirmation("plt", existingRole.name, roleId);
                 }
 
                 for (const key in config.ROLES_PLATEFORME) {
@@ -345,13 +341,13 @@ module.exports = (client) => {
                 }
 
                 await member.roles.add(roleId).catch(() => {});
-                return sendResponseEmbed("Profil Mis à Jour", "Votre plateforme de jeu principale a été mise à jour.", true);
+                return await sendResponseEmbed("Profil Mis à Jour", "Votre plateforme de jeu principale a été mise à jour.", true);
             }
 
-            // 3. DÉROULANT : NOTIFICATIONS (CHOIX MULTIPLES)
+            // 3. NOTIFICATIONS (CHOIX MULTIPLES)
             if (interaction.customId === "role_select_notifs") {
                 if (!config.ROLES_NOTIFS) {
-                    return sendResponseEmbed("Configuration Manquante", "La configuration des notifications est introuvable.", false);
+                    return await sendResponseEmbed("Configuration Manquante", "La configuration des notifications est introuvable.", false);
                 }
 
                 const selectedValues = interaction.values;
@@ -371,19 +367,19 @@ module.exports = (client) => {
                     }
                 }
 
-                return sendResponseEmbed("Préférences Mises à Jour", "Vos abonnements aux notifications ont été ajustés selon vos choix.", true);
+                return await sendResponseEmbed("Préférences Mises à Jour", "Vos abonnements aux notifications ont été ajustés selon vos choix.", true);
             }
 
-            // 4. DÉROULANT : DIVISION FORTNITE
+            // 4. DIVISION FORTNITE
             if (interaction.customId === "role_select_division") {
                 if (!config.ROLES_DIVISION) {
-                    return sendResponseEmbed("Configuration Manquante", "La configuration des divisions est introuvable.", false);
+                    return await sendResponseEmbed("Configuration Manquante", "La configuration des divisions est introuvable.", false);
                 }
 
                 const roleId = config.ROLES_DIVISION[selectedValue];
 
                 if (selectedValue === "DIV_1") {
-                    return sendResponseEmbed(
+                    return await sendResponseEmbed(
                         "Vérification Requise — Division 1",
                         "L'accès au rôle **Division 1** nécessite une validation manuelle par le Staff.\n\nVeuillez ouvrir un ticket support pour fournir vos preuves de niveau.",
                         false
@@ -391,7 +387,7 @@ module.exports = (client) => {
                 }
 
                 if (!roleId || roleId.startsWith("ID_")) {
-                    return sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas encore configuré dans les fichiers du bot.", false);
+                    return await sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas encore configuré dans les fichiers du bot.", false);
                 }
 
                 let existingRole = null;
@@ -404,7 +400,7 @@ module.exports = (client) => {
                 }
 
                 if (existingRole && existingRole.id !== roleId) {
-                    return askConfirmation("div", existingRole.name, roleId);
+                    return await askConfirmation("div", existingRole.name, roleId);
                 }
 
                 for (const key in config.ROLES_DIVISION) {
@@ -415,7 +411,7 @@ module.exports = (client) => {
                 }
 
                 await member.roles.add(roleId).catch(() => {});
-                return sendResponseEmbed("Profil Mis à Jour", "Votre division compétitive a été enregistrée.", true);
+                return await sendResponseEmbed("Profil Mis à Jour", "Votre division compétitive a été enregistrée.", true);
             }
 
         } catch (error) {

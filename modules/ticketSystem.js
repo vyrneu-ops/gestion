@@ -160,6 +160,18 @@ async function getCategoryForType(guild, type) {
 module.exports = async (client) => {
     console.log("[TICKET SYSTEM] Initialisation du système de tickets...");
 
+    // --- SUIVI DES MESSAGES DANS LES TICKETS ---
+    client.on("messageCreate", async (message) => {
+        if (message.author.bot || !message.guild) return;
+
+        const db = readDB();
+        if (db.tickets[message.channel.id]) {
+            db.tickets[message.channel.id].lastActivity = Date.now();
+            db.tickets[message.channel.id].messageCount = (db.tickets[message.channel.id].messageCount || 0) + 1;
+            writeDB(db);
+        }
+    });
+
     // --- MISE EN PLACE DU PANEL DANS LE SALON ---
     const panelChannel = await client.channels.fetch(config.PANEL_CHANNEL).catch(() => null);
     if (panelChannel) {
@@ -604,55 +616,73 @@ async function closeTicketSystem(channel, client, context, staffUser, sendReview
             if (vc) await vc.delete().catch(() => {});
         }
 
-        // 2. Génération du Transcript
+        // 2. Génération du Transcript HTML
         const attachment = await discordTranscripts.createTranscript(channel, {
             limit: -1,
-            returnType: 'attachment',
+            returnType: "attachment",
             filename: `transcript-${channel.name}.html`,
             saveImages: true,
             poweredBy: false
-        });
+        }).catch(() => null);
 
-        const summaryEmbed = new EmbedBuilder()
-            .setColor("#2F3136")
-            .setTitle(`${EMOJIS.lock} Archive de Ticket`)
-            .setDescription(`• Salon : \`${channel.name}\`\n• Demandeur : <@${context ? context.userId : "Inconnu"}>\n• Clôturé par : ${staffUser}`)
+        // 3. Incrémentation des statistiques pour le membre du staff qui ferme/claim
+        const claimedOrStaffId = context?.claimedBy || staffUser.id;
+        if (!db.stats[claimedOrStaffId]) db.stats[claimedOrStaffId] = { closedTickets: 0, reviews: [] };
+        db.stats[claimedOrStaffId].closedTickets += 1;
+
+        // 4. Construction de l'embed de Log
+        const logEmbed = new EmbedBuilder()
+            .setColor("#ED4245")
+            .setTitle(`${EMOJIS.lock} TICKET FERMÉ — ${channel.name}`)
+            .addFields(
+                { name: "Demandeur", value: context ? `<@${context.userId}> (\`${context.userId}\`)` : "Inconnu", inline: true },
+                { name: "Fermé par", value: `${staffUser} (\`${staffUser.id}\`)`, inline: true },
+                { name: "Pris en charge par", value: context?.claimedBy ? `<@${context.claimedBy}>` : "Non revendiqué", inline: true },
+                { name: "Type de ticket", value: context?.type || "Non défini", inline: true },
+                { name: "Messages", value: `${context?.messageCount || 0}`, inline: true }
+            )
             .setTimestamp();
 
-        const archChan = await client.channels.fetch(ARCHIVE_CHANNEL).catch(() => null);
-        if (archChan) await archChan.send({ embeds: [summaryEmbed], files: [attachment] });
+        // Envoi des logs dans les salons dédiés
+        const logChannel = await channel.guild.channels.fetch(LOGS_CHANNEL).catch(() => null);
+        if (logChannel) await logChannel.send({ embeds: [logEmbed], files: attachment ? [attachment] : [] }).catch(() => {});
 
-        const logChan = await client.channels.fetch(LOGS_CHANNEL).catch(() => null);
-        if (logChan) await logChan.send({ embeds: [summaryEmbed] });
+        const archiveChannel = await channel.guild.channels.fetch(ARCHIVE_CHANNEL).catch(() => null);
+        if (archiveChannel && attachment) await archiveChannel.send({ embeds: [logEmbed], files: [attachment] }).catch(() => {});
 
-        // 3. Envoi du Formulaire d'Avis au membre par MP
+        // 5. Envoi du formulaire d'avis en MP au demandeur du ticket
         if (sendReviewPrompt && context?.userId) {
-            const targetMember = await channel.guild.members.fetch(context.userId).catch(() => null);
-            if (targetMember) {
-                const staffId = context.claimedBy || client.user.id;
-                const reviewRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`rate_5_${staffId}`).setLabel("5 ⭐").setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId(`rate_4_${staffId}`).setLabel("4 ⭐").setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId(`rate_3_${staffId}`).setLabel("3 ⭐").setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder().setCustomId(`rate_2_${staffId}`).setLabel("2 ⭐").setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder().setCustomId(`rate_1_${staffId}`).setLabel("1 ⭐").setStyle(ButtonStyle.Danger)
+            const targetUser = await client.users.fetch(context.userId).catch(() => null);
+            if (targetUser) {
+                const ratingRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`rate_1_${claimedOrStaffId}`).setLabel("1 ⭐").setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId(`rate_2_${claimedOrStaffId}`).setLabel("2 ⭐").setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`rate_3_${claimedOrStaffId}`).setLabel("3 ⭐").setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`rate_4_${claimedOrStaffId}`).setLabel("4 ⭐").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`rate_5_${claimedOrStaffId}`).setLabel("5 ⭐").setStyle(ButtonStyle.Success)
                 );
-                await targetMember.send({
-                    embeds: [new EmbedBuilder().setColor("#2F3136").setTitle(`${EMOJIS.certified} Évaluation — Team HeLoRiA`).setDescription("Votre ticket est désormais clos. Merci de donner votre avis sur l'aide apportée :")],
-                    components: [reviewRow]
+
+                const reviewPromptEmbed = new EmbedBuilder()
+                    .setColor("#2F3136")
+                    .setTitle(`${EMOJIS.certified} Votre avis sur le support Team HeLoRiA`)
+                    .setDescription(`Votre ticket **#${channel.name}** a été fermé.\n\nComment évaluez-vous la qualité de la prise en charge par notre staff ? Cliquez sur une note ci-dessous pour laisser un commentaire.`);
+
+                await targetUser.send({
+                    embeds: [reviewPromptEmbed],
+                    components: [ratingRow]
                 }).catch(() => {});
             }
         }
 
-        // 4. Nettoyage de la base de données
+        // 6. Suppression de la base de données et destruction du salon
         if (db.tickets[channel.id]) {
             delete db.tickets[channel.id];
-            writeDB(db);
         }
+        writeDB(db);
 
-    } catch (err) {
-        console.error("Erreur clôture :", err);
-    } finally {
         setTimeout(() => channel.delete().catch(() => {}), 2000);
+    } catch (err) {
+        console.error("[CLOSE TICKET ERROR]", err);
+        channel.delete().catch(() => {});
     }
 }

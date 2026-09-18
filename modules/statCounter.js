@@ -1,8 +1,6 @@
-const config = require('../ticket_config.js');
-
 module.exports = (client) => {
-    // ID du salon vocal transmis : 1550597435418615899
-    const CHANNEL_ID = config.MEMBER_COUNT_CHANNEL || "1550597435418615899";
+    // ID du salon vocal du compteur
+    const CHANNEL_ID = "1550597435418615899";
     
     // Variables pour gérer la mise à jour fluide sans spam d'API
     let isUpdating = false;
@@ -25,7 +23,6 @@ module.exports = (client) => {
             
             if (!channel) {
                 console.error(`[StatCounter] Salon introuvable avec l'ID : ${CHANNEL_ID}`);
-                isUpdating = false;
                 return;
             }
 
@@ -51,18 +48,18 @@ module.exports = (client) => {
             // Si une mise à jour a été demandée pendant le traitement, on relance
             if (pendingUpdate) {
                 pendingUpdate = false;
-                setTimeout(updateCounter, 5000); // Petite pause de sécurité (5s)
+                setTimeout(updateCounter, 5000); // Pause de sécurité (5s)
             }
         }
     }
 
-    // 1. Mise à jour immédiate au lancement du bot
+    // 1. Mise à jour immédiate au lancement
     updateCounter();
 
     // 2. Événements instantanés lors des arrivées et départs
     client.on('guildMemberAdd', () => updateCounter());
     client.on('guildMemberRemove', () => updateCounter());
 
-    // 3. Intervalle de sécurité toutes les 10 minutes pour synchroniser au besoin
+    // 3. Intervalle de sécurité toutes les 10 minutes
     setInterval(updateCounter, 10 * 60 * 1000);
 };
