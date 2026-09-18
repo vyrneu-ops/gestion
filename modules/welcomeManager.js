@@ -6,13 +6,14 @@ const COLOR_GOLD = "#D4AF37";
 const COLOR_JOIN = "#2ECC71";
 const COLOR_LEAVE = "#E74C3C";
 const COLOR_INFO = "#3498DB";
+const COLOR_WARN = "#E67E22";
 
-// Registre d'emojis personnalisés issus de ta liste
+// Registre d'emojis personnalisés
 const EMOJIS = {
     WELCOME: "<:5647premiumicon:1533535330538360942>",
     CERTIFIED: "<:20336certified:1537579306690281544>",
     STAR: "<a:darkbluecrown:1533535362566324245>",
-    MEMBERS: "<:75828briefcase:153757902812807248>",
+    MEMBERS: "<:75828briefcase:1537579702812807248>", // Correction de l'ID Discord
     INVITE: "<:600404handshake:1537578056447828058>",
     RULES: "<:580437rules:1537583160345366578>",
     ROLES: "<:hlrwin:1537584105536094248>",
@@ -20,7 +21,8 @@ const EMOJIS = {
     GEAR: "<:65264telescope:1537586517453832222>",
     JOIN: "<:5647premiumicon:1533535330538360942>",
     LEAVE: "<:9299blurpleban:1533535325996056807>",
-    LINK: "<:3446blurplecertifiedmoderator:1533535324309815367>"
+    LINK: "<:3446blurplecertifiedmoderator:1533535324309815367>",
+    WARN: "<:warningd:1533535400176386068>"
 };
 
 const invitesCache = new Map();
@@ -31,7 +33,7 @@ function validUrl(url) {
 }
 
 module.exports = (client) => {
-    console.log("[SYSTEM] Initialisation du module Welcome Manager HeLoRiA...");
+    console.log("[SYSTÈME] Initialisation du module Welcome Manager HeLoRiA...");
 
     // Chargement de l'état des invitations au démarrage
     const initInvites = async () => {
@@ -59,7 +61,7 @@ module.exports = (client) => {
         guildInvites.set(invite.code, invite.uses);
         invitesCache.set(invite.guild.id, guildInvites);
 
-        const creator = invite.inviter ? `**${invite.inviter.username}** (\`${invite.inviter.id}\`)` : "Inconnu";
+        const creator = invite.inviter ? `**${invite.inviter.username}** (\`${invite.inviter.id}\`)` : "Inconnu / Système";
 
         const logInviteEmbed = new EmbedBuilder()
             .setColor(COLOR_GOLD)
@@ -85,15 +87,16 @@ module.exports = (client) => {
         const guild = member.guild;
         const memberCount = guild.memberCount;
 
-        // Attribution automatique du rôle par défaut
+        // 1. Attribution automatique du rôle par défaut
         if (config.AUTO_ROLE_ID && config.AUTO_ROLE_ID.trim() !== "") {
             await member.roles.add(config.AUTO_ROLE_ID).catch(() => {});
         }
 
-        // Suivi précis du code d'invitation utilisé
+        // 2. Suivi du code d'invitation utilisé (avec gestion de la Vanité URL)
         let inviterUser = null;
         let inviteCodeUsed = null;
         let inviteUses = 0;
+        let isVanity = false;
 
         const oldInvites = invitesCache.get(guild.id);
         const newInvites = await guild.invites.fetch().catch(() => null);
@@ -110,16 +113,32 @@ module.exports = (client) => {
             }
         }
 
+        // Traitement URL Personnalisée (Vanity) si aucun code classique n'a augmenté
+        if (!inviteCodeUsed && guild.features.includes("VANITY_URL")) {
+            const vanityData = await guild.fetchVanityData().catch(() => null);
+            if (vanityData) {
+                inviteCodeUsed = vanityData.code;
+                isVanity = true;
+            }
+        }
+
         if (newInvites) {
             invitesCache.set(guild.id, new Map(newInvites.map(i => [i.code, i.uses])));
         }
 
-        // Message public de bienvenue
+        // 3. Message public de bienvenue
         if (config.CHANNELS?.WELCOME) {
             const welcomeChannel = await guild.channels.fetch(config.CHANNELS.WELCOME).catch(() => null);
             if (welcomeChannel) {
-                const inviterText = inviterUser ? `**${inviterUser.username}**` : "Lien Personnalisé / Discord";
-                const scoreText = inviterUser ? `(\`${inviteUses}\` invitations)` : "";
+                let inviterText = "Lien Officiel / Discord";
+                let scoreText = "";
+
+                if (inviterUser) {
+                    inviterText = `**${inviterUser.username}**`;
+                    scoreText = `(\`${inviteUses}\` invitations)`;
+                } else if (isVanity) {
+                    inviterText = `Lien Personnalisé (\`discord.gg/${inviteCodeUsed}\`)`;
+                }
 
                 const logoUrl = validUrl(config.LOGO_URL);
                 const bannerUrl = validUrl(config.BANNER_URL);
@@ -132,7 +151,7 @@ module.exports = (client) => {
                         `Tu viens de rejoindre la communauté officielle d'**HeLoRiA**.\n\n` +
                         `─── **INFORMATIONS D'ARRIVÉE** ───\n\n` +
                         `• ${EMOJIS.MEMBERS} **Effectif :** Tu es notre **${memberCount}e** membre !\n` +
-                        `• ${EMOJIS.INVITE} **Invitation :** Rejoint grâce à ${inviterText} ${scoreText}\n\n` +
+                        `• ${EMOJIS.INVITE} **Invitation :** Rejoint grâce à ${inviterText}${scoreText}\n\n` +
                         `─── **GUIDE DE DÉMARRAGE** ───\n\n` +
                         `• ${EMOJIS.RULES} **Règlement :** Consulte le salon des règles pour naviguer sereinement.\n` +
                         `• ${EMOJIS.ROLES} **Rôles :** Prends tes accès et consoles dans le salon des rôles.\n` +
@@ -142,7 +161,7 @@ module.exports = (client) => {
                     .setTimestamp();
 
                 if (bannerUrl) welcomeEmbed.setImage(bannerUrl);
-                
+
                 const footerData = { text: `HeLoRiA • Effectif global : ${memberCount} membres` };
                 if (logoUrl) footerData.iconURL = logoUrl;
                 welcomeEmbed.setFooter(footerData);
@@ -151,14 +170,34 @@ module.exports = (client) => {
             }
         }
 
-        // Logs Interne Staff (Arrivée Membre)
+        // 4. Message Privé (DM) d'accueil de courtoisie
+        try {
+            const dmEmbed = new EmbedBuilder()
+                .setColor(COLOR_GOLD)
+                .setTitle(`${EMOJIS.WELCOME} BIENVENUE SUR HELORIA !`)
+                .setDescription(
+                    `Bonjour ${member.user.username},\n\n` +
+                    `Merci d'avoir rejoint le serveur **HeLoRiA** ! Nous sommes ravis de te compter parmi nous.\n\n` +
+                    `N'hésite pas à prendre tes rôles et à passer dire bonjour dans le salon général.`
+                )
+                .setFooter({ text: "HeLoRiA • Message Automatique" })
+                .setTimestamp();
+
+            await member.send({ embeds: [dmEmbed] }).catch(() => {});
+        } catch (err) {
+            // Ignorer l'erreur si les MP du membre sont fermés
+        }
+
+        // 5. Logs Interne Staff (Arrivée Membre & Anti-Raid)
         if (config.CHANNELS?.LOGS_MEMBRES) {
             const logMembreChannel = await client.channels.fetch(config.CHANNELS.LOGS_MEMBRES).catch(() => null);
             if (logMembreChannel) {
                 const createdTimestamp = Math.floor(member.user.createdTimestamp / 1000);
+                const accountAgeDays = Math.floor((Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24));
+                const isRecentAccount = accountAgeDays < 7;
 
                 const joinEmbed = new EmbedBuilder()
-                    .setColor(COLOR_JOIN)
+                    .setColor(isRecentAccount ? COLOR_WARN : COLOR_JOIN)
                     .setTitle(`${EMOJIS.JOIN} NOUVEAU MEMBRE REJOINT`)
                     .addFields(
                         { name: "Utilisateur", value: `${member.user.tag}`, inline: true },
@@ -169,11 +208,19 @@ module.exports = (client) => {
                     .setFooter({ text: "HeLoRiA • Registre des Membres" })
                     .setTimestamp();
 
+                if (isRecentAccount) {
+                    joinEmbed.addFields({
+                        name: `${EMOJIS.WARN} AVERTISSEMENT SÉCURITÉ`,
+                        value: `⚠️ **Compte très récent !** Créé il y a seulement **${accountAgeDays} jour(s)**.`,
+                        inline: false
+                    });
+                }
+
                 logMembreChannel.send({ embeds: [joinEmbed] }).catch(() => {});
             }
         }
 
-        // Logs Détaillés du Tracking d'Invitation
+        // 6. Logs Détaillés du Tracking d'Invitation
         if (config.CHANNELS?.LOGS_INVITES) {
             const logInviteChannel = await client.channels.fetch(config.CHANNELS.LOGS_INVITES).catch(() => null);
             if (logInviteChannel) {
@@ -182,9 +229,9 @@ module.exports = (client) => {
                     .setTitle(`${EMOJIS.INVITE} SUIVI D'INVITATION`)
                     .addFields(
                         { name: "Membre rejoint", value: `${member.user.username} (\`${member.id}\`)`, inline: false },
-                        { name: "Auteur de l'invitation", value: inviterUser ? `${inviterUser.username} (\`${inviterUser.id}\`)` : "Inconnu / Vanity", inline: true },
+                        { name: "Auteur de l'invitation", value: inviterUser ? `${inviterUser.username} (\`${inviterUser.id}\`)` : (isVanity ? "Lien Personnalisé (Vanity)" : "Inconnu"), inline: true },
                         { name: "Code utilisé", value: inviteCodeUsed ? `\`${inviteCodeUsed}\`` : "N/A", inline: true },
-                        { name: "Total d'invitations", value: `\`${inviteUses}\``, inline: true }
+                        { name: "Total d'invitations", value: inviterUser ? `\`${inviteUses}\`` : "N/A", inline: true }
                     )
                     .setFooter({ text: "HeLoRiA • Traçabilité des Invitations" })
                     .setTimestamp();

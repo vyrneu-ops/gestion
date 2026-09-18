@@ -2,18 +2,18 @@ const {
     EmbedBuilder, 
     ActionRowBuilder, 
     StringSelectMenuBuilder, 
-    ButtonBuilder,
-    ButtonStyle,
+    ButtonBuilder, 
+    ButtonStyle, 
     PermissionsBitField 
 } = require("discord.js");
 const config = require("../data/rolesConfig");
 
-// Palette de couleurs dorée & prestige
+// Palette de couleurs prestige HeLoRiA
 const COLOR_GOLD = "#D4AF37";
-const COLOR_BLACK = "#000001";
-const COLOR_MAINTENANCE = "#FF9900";
+const COLOR_DARK = "#0F0F0F";
+const COLOR_ERROR = "#2F0000";
 
-// Emojis personnalisés HeLoRiA
+// Emojis personnalisés HeLoRiA (Conservés à 100%)
 const EMOJIS = {
     HLR_WIN: "<:hlrwin:1537584105536094248>",
     PREMIUM: "<:5647premiumicon:1533535330538360942>",
@@ -23,40 +23,25 @@ const EMOJIS = {
     MIC_ANIM: "<:68052micanimation:1537582247278813204>"
 };
 
-// Variable d'état de la maintenance (initialisée à true pour être active au lancement)
-let isMaintenanceActive = true;
-
 module.exports = (client) => {
-    console.log("[ROLE SYSTEM] Module d'auto-rôle HeLoRiA prêt (Maintenance activée par défaut).");
+    console.log("[ROLE SYSTEM] Module d'auto-rôle HeLoRiA prêt & sécurisé.");
 
     // =====================================================
-    // COMMANDES TEXTUELLES (+setup-roles et +maintenance-roles)
+    // INITIALISATION DU PANNEAU (+setup-roles)
     // =====================================================
     client.on("messageCreate", async (msg) => {
         if (!msg.guild || msg.author.bot) return;
 
-        // Commande de bascule du mode maintenance
-        if (msg.content === "+maintenance-roles") {
-            if (!msg.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                return msg.reply("Seuls les administrateurs peuvent gérer la maintenance.").catch(() => {});
-            }
-
-            isMaintenanceActive = !isMaintenanceActive;
-            const stateText = isMaintenanceActive ? "activée 🛠️" : "désactivée ✅";
-            return msg.reply(`La maintenance du système de rôles a été **${stateText}**.`);
-        }
-
-        // Commande d'installation du panneau
         if (msg.content === "+setup-roles") {
             try {
-                if (!msg.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                    return msg.reply("Seuls les administrateurs peuvent exécuter cette commande.").catch(() => {});
+                if (!msg.member || !msg.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                    return msg.reply("❌ **Seuls les administrateurs peuvent exécuter cette commande.**").catch(() => {});
                 }
 
                 await msg.delete().catch(() => {});
 
-                // Nettoyage des anciens messages du bot dans le salon
-                const channelMessages = await msg.channel.messages.fetch({ limit: 20 }).catch(() => null);
+                // Nettoyage sécurisé des anciens messages du bot dans le salon
+                const channelMessages = await msg.channel.messages.fetch({ limit: 25 }).catch(() => null);
                 if (channelMessages) {
                     const oldBotMessages = channelMessages.filter(m => m.author.id === client.user.id);
                     for (const oldMsg of oldBotMessages.values()) {
@@ -64,64 +49,66 @@ module.exports = (client) => {
                     }
                 }
 
-                // HEADER
+                // 1. EMBED HEADER PRINCIPAL
                 const headerEmbed = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
-                    .setTitle(`${EMOJIS.HLR_WIN} HeLoRiA — CONFIGURATION DU PROFIL`)
+                    .setTitle(`${EMOJIS.HLR_WIN}  HELORIA — CONFIGURATION DU PROFIL`)
                     .setDescription(
-                        `Bienvenue dans l'espace officiel de personnalisation de votre profil **HeLoRiA**.\n\n` +
-                        `Sélectionnez vos options via les menus déroulants ci-dessous afin de définir vos rôles, votre support de jeu et vos préférences d'affichage.\n\n` +
+                        `Bienvenue dans l'espace officiel de personnalisation de votre profil **HeLoRiA**.\n` +
+                        `Sélectionnez vos options via les menus déroulants ci-dessous pour personnaliser vos rôles et accès.\n\n` +
+                        `──────────────────────────────\n` +
                         `> ${EMOJIS.PREMIUM} **Fonctionnement du système :**\n` +
-                        `> • Choisissez une option dans le menu pour attribuer le rôle.\n` +
-                        `> • Si vous possédez déjà un rôle similaire, une confirmation vous sera demandée.\n` +
-                        `> • Toute modification est enregistrée instantanément.`
-                    );
+                        `> • Sélectionnez une option dans un menu pour obtenir le rôle associé.\n` +
+                        `> • En cas de remplacement d'un rôle existant, une confirmation vous sera demandée.\n` +
+                        `> • Vos modifications sont sauvegardées et appliquées instantanément.`
+                    )
+                    .setFooter({ text: "HeLoRiA • #RiseSoarConquer" });
 
-                // IDENTITÉ & GENRE
+                // 2. EMBED & MENU : IDENTITÉ
                 const embedGenre = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
-                    .setTitle(`${EMOJIS.CERTIFIED} Ⅰ. IDENTITÉ & GENRE`)
-                    .setDescription("Définissez le genre associé à votre profil membre au sein de la structure.");
+                    .setTitle(`${EMOJIS.CERTIFIED}  Ⅰ. IDENTITÉ & GENRE`)
+                    .setDescription("Définissez le genre associé à votre profil membre au sein de la communauté.");
 
                 const menuGenre = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder()
                         .setCustomId("role_select_genre")
-                        .setPlaceholder("Sélectionner votre genre...")
+                        .setPlaceholder("Choisissez votre genre...")
                         .addOptions([
-                            { label: "Homme", value: "HOMME", description: "Définir le profil : Homme", emoji: "👨" },
-                            { label: "Femme", value: "FEMME", description: "Définir le profil : Femme", emoji: "👩" },
-                            { label: "Non précisé", value: "NON_PRECISE", description: "Retirer l'affichage du genre", emoji: "⚙️" }
+                            { label: "Homme", value: "HOMME", description: "Définir l'identité : Homme", emoji: "👨" },
+                            { label: "Femme", value: "FEMME", description: "Définir l'identité : Femme", emoji: "👩" },
+                            { label: "Non précisé", value: "NON_PRECISE", description: "Ne pas afficher de genre sur votre profil", emoji: "⚙️" }
                         ])
                 );
 
-                // PLATEFORME
+                // 3. EMBED & MENU : PLATEFORME
                 const embedPlateforme = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
-                    .setTitle(`${EMOJIS.MIC_ANIM} Ⅱ. SUPPORT & PLATEFORME DE JEU`)
-                    .setDescription("Indiquez la plateforme principale sur laquelle vous évoluez en jeu.");
+                    .setTitle(`${EMOJIS.MIC_ANIM}  Ⅱ. SUPPORT & PLATEFORME DE JEU`)
+                    .setDescription("Sélectionnez votre plateforme principale de jeu.");
 
                 const menuPlateforme = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder()
                         .setCustomId("role_select_plateforme")
-                        .setPlaceholder("Sélectionner votre plateforme...")
+                        .setPlaceholder("Choisissez votre plateforme...")
                         .addOptions([
-                            { label: "PC", value: "PC", description: "Joueur PC (Windows / Mac / Linux)", emoji: "💻" },
-                            { label: "PlayStation", value: "PLAYSTATION", description: "Joueur Console PlayStation", emoji: "🎮" },
-                            { label: "Xbox", value: "XBOX", description: "Joueur Console Xbox", emoji: "🎮" },
-                            { label: "Nintendo Switch", value: "SWITCH", description: "Joueur Console Nintendo Switch", emoji: "🕹️" }
+                            { label: "PC", value: "PC", description: "Plateforme : PC (Windows / Mac / Linux)", emoji: "💻" },
+                            { label: "PlayStation", value: "PLAYSTATION", description: "Plateforme : Console PlayStation", emoji: "🎮" },
+                            { label: "Xbox", value: "XBOX", description: "Plateforme : Console Xbox", emoji: "🎮" },
+                            { label: "Nintendo Switch", value: "SWITCH", description: "Plateforme : Nintendo Switch", emoji: "🕹️" }
                         ])
                 );
 
-                // NOTIFICATIONS
+                // 4. EMBED & MENU : NOTIFICATIONS
                 const embedNotifs = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
-                    .setTitle(`${EMOJIS.RULES} Ⅲ. PREFÉRENCES DE NOTIFICATIONS`)
-                    .setDescription("Sélectionnez les alertes et annonces que vous souhaitez recevoir sur le serveur.");
+                    .setTitle(`${EMOJIS.RULES}  Ⅲ. PRÉFÉRENCES DE NOTIFICATIONS`)
+                    .setDescription("Choisissez les actualités et alertes que vous souhaitez recevoir sur le serveur.");
 
                 const menuNotifs = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder()
                         .setCustomId("role_select_notifs")
-                        .setPlaceholder("Sélectionner vos alertes...")
+                        .setPlaceholder("Sélectionnez vos alertes (Choix multiples)...")
                         .setMinValues(0)
                         .setMaxValues(6)
                         .addOptions([
@@ -134,22 +121,22 @@ module.exports = (client) => {
                         ])
                 );
 
-                // DIVISION FORTNITE
+                // 5. EMBED & MENU : DIVISION FORTNITE
                 const embedDivision = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
-                    .setTitle(`${EMOJIS.TRIAL_MOD} Ⅳ. NIVEAU COMPÉTITIF — FORTNITE`)
+                    .setTitle(`${EMOJIS.TRIAL_MOD}  Ⅳ. NIVEAU COMPÉTITIF — FORTNITE`)
                     .setDescription(
-                        `Affichez votre division compétitive actuelle.\n\n` +
-                        `> **Note importante :** L'accès à la **Division 1** nécessite impérativement une vérification de vos preuves de rang auprès du Staff.`
+                        `Affichez votre niveau compétitif actuel.\n\n` +
+                        `> ⚠️ **Note :** L'accès à la **Division 1** nécessite impérativement une vérification de vos preuves de rang auprès du Staff.`
                     )
                     .setFooter({ text: "HeLoRiA • #RiseSoarConquer" });
 
                 const menuDivision = new ActionRowBuilder().addComponents(
                     new StringSelectMenuBuilder()
                         .setCustomId("role_select_division")
-                        .setPlaceholder("Sélectionner votre division...")
+                        .setPlaceholder("Choisissez votre division...")
                         .addOptions([
-                            { label: "Division 1 (Vérification Staff)", value: "DIV_1", description: "Niveau Élite • Validation Staff Requise", emoji: "🏆" },
+                            { label: "Division 1 (Vérification Staff)", value: "DIV_1", description: "Niveau Élite • Validation Staff requise", emoji: "🏆" },
                             { label: "Division 2", value: "DIV_2", description: "Niveau Avancé", emoji: "🥇" },
                             { label: "Division 3", value: "DIV_3", description: "Niveau Intermédiaire", emoji: "🥈" },
                             { label: "Division 4", value: "DIV_4", description: "Niveau Challenger", emoji: "🥉" },
@@ -157,263 +144,282 @@ module.exports = (client) => {
                         ])
                 );
 
-                await msg.channel.send({ embeds: [headerEmbed] }).catch(() => {});
-                await msg.channel.send({ embeds: [embedGenre], components: [menuGenre] }).catch(() => {});
-                await msg.channel.send({ embeds: [embedPlateforme], components: [menuPlateforme] }).catch(() => {});
-                await msg.channel.send({ embeds: [embedNotifs], components: [menuNotifs] }).catch(() => {});
-                await msg.channel.send({ embeds: [embedDivision], components: [menuDivision] }).catch(() => {});
+                // Envoi propre et ordonné des panneaux
+                await msg.channel.send({ embeds: [headerEmbed] });
+                await msg.channel.send({ embeds: [embedGenre], components: [menuGenre] });
+                await msg.channel.send({ embeds: [embedPlateforme], components: [menuPlateforme] });
+                await msg.channel.send({ embeds: [embedNotifs], components: [menuNotifs] });
+                await msg.channel.send({ embeds: [embedDivision], components: [menuDivision] });
 
             } catch (error) {
-                console.error("Erreur lors de l'initialisation du panneau de rôles :", error);
+                console.error("[ROLE SYSTEM] Erreur lors de la création du panneau de rôles :", error);
             }
         }
     });
 
     // =====================================================
-    // GESTION DES INTERACTIONS (BOUTONS & MENUS)
+    // GESTION DES INTERACTIONS (SELECTIONS ET BOUTONS)
     // =====================================================
     client.on("interactionCreate", async (interaction) => {
         if (!interaction.guild) return;
 
-        const isRoleButton = interaction.isButton() && interaction.customId.startsWith("confirm_role_");
-        const isRoleSelect = interaction.isStringSelectMenu() && interaction.customId.startsWith("role_select_");
-
-        if (!isRoleButton && !isRoleSelect) return;
-
-        // VÉRIFICATION DE LA MAINTENANCE
-        if (isMaintenanceActive && !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            const maintEmbed = new EmbedBuilder()
-                .setColor(COLOR_MAINTENANCE)
-                .setTitle("🛠️ Système en Maintenance")
-                .setDescription("Le système d'attribution des rôles est temporairement en maintenance pour mise à jour. Veuillez réessayer plus tard.")
-                .setFooter({ text: "HeLoRiA • Maintenance" });
-
-            return interaction.reply({ embeds: [maintEmbed], ephemeral: true }).catch(() => {});
-        }
-
-        // --- TRAITEMENT DES BOUTONS DE CONFIRMATION ---
-        if (isRoleButton) {
-            await interaction.deferUpdate().catch(() => {});
-
-            const parts = interaction.customId.split("_");
-            const isYes = parts[2] === "yes";
-            const type = parts[3];
-            const selectedValue = parts[4];
-            const targetRoleId = parts[5];
-            const member = interaction.member;
-
-            if (isYes) {
-                let categoryConfig;
-                if (type === "genre") categoryConfig = config.ROLES_GENRE;
-                if (type === "plateforme") categoryConfig = config.ROLES_PLATEFORME;
-                if (type === "division") categoryConfig = config.ROLES_DIVISION;
-
-                if (categoryConfig) {
-                    const rolesToRemove = [];
-                    for (const key in categoryConfig) {
-                        const id = categoryConfig[key];
-                        if (id && member.roles.cache.has(id)) rolesToRemove.push(id);
-                    }
-                    if (rolesToRemove.length > 0) {
-                        await member.roles.remove(rolesToRemove).catch(() => {});
-                    }
-                }
-
-                if (selectedValue !== "NON_PRECISE" && targetRoleId && targetRoleId !== "undefined") {
-                    await member.roles.add(targetRoleId).catch(() => {});
-                }
-
-                const successEmbed = new EmbedBuilder()
-                    .setColor(COLOR_GOLD)
-                    .setTitle(`${EMOJIS.CERTIFIED} Profil Mis à Jour`)
-                    .setDescription("Votre changement de rôle a bien été effectué et enregistré.")
-                    .setFooter({ text: "HeLoRiA • Système de Profil" });
-
-                return interaction.editReply({ embeds: [successEmbed], components: [] }).catch(() => {});
-            } else {
-                const cancelEmbed = new EmbedBuilder()
-                    .setColor(COLOR_BLACK)
-                    .setTitle("⚠️ Modification Annulée")
-                    .setDescription("Votre rôle actuel a été conservé sans modification.")
-                    .setFooter({ text: "HeLoRiA • Système de Profil" });
-
-                return interaction.editReply({ embeds: [cancelEmbed], components: [] }).catch(() => {});
-            }
-        }
-
-        // --- TRAITEMENT DES MENUS DÉROULANTS ---
-        if (isRoleSelect) {
+        // -----------------------------------------------------
+        // A. GESTION DES BOUTONS DE CONFIRMATION
+        // -----------------------------------------------------
+        if (interaction.isButton() && interaction.customId.startsWith("cf_role_")) {
             try {
-                await interaction.deferReply({ ephemeral: true }).catch(() => {});
+                await interaction.deferUpdate().catch(() => {});
 
+                // Pattern: cf_role_[y/n]_[cat]_[val]_[roleId]
+                const parts = interaction.customId.split("_");
+                const isYes = parts[2] === "y";
+                const category = parts[3];
+                const selectedValue = parts[4];
+                const targetRoleId = parts[5];
                 const member = interaction.member;
-                const selectedValue = interaction.values[0];
 
-                const sendResponseEmbed = async (title, statusText, isSuccess = true) => {
-                    const responseEmbed = new EmbedBuilder()
-                        .setColor(isSuccess ? COLOR_GOLD : COLOR_BLACK)
-                        .setTitle(`${isSuccess ? EMOJIS.CERTIFIED : "⚠️"} ${title}`)
-                        .setDescription(statusText)
-                        .setFooter({ text: "HeLoRiA • Système de Profil" });
+                if (!member) return;
 
-                    return interaction.editReply({ embeds: [responseEmbed], components: [] }).catch(() => {});
-                };
+                if (isYes) {
+                    let categoryConfig;
+                    if (category === "gnr") categoryConfig = config.ROLES_GENRE;
+                    if (category === "plt") categoryConfig = config.ROLES_PLATEFORME;
+                    if (category === "div") categoryConfig = config.ROLES_DIVISION;
 
-                const askConfirmation = async (type, currentRoleName, targetRoleId) => {
-                    const confirmEmbed = new EmbedBuilder()
-                        .setColor(COLOR_GOLD)
-                        .setTitle(`${EMOJIS.PREMIUM} Modification de Rôle`)
-                        .setDescription(
-                            `Vous possédez déjà un rôle attribué dans cette catégorie (**${currentRoleName}**).\n\n` +
-                            `**Voulez-vous vraiment remplacer votre rôle actuel par ce nouveau choix ?**`
-                        )
-                        .setFooter({ text: "HeLoRiA • Confirmation Requise" });
-
-                    const confirmButtons = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(`confirm_role_yes_${type}_${selectedValue}_${targetRoleId}`)
-                            .setLabel("Oui, confirmer")
-                            .setStyle(ButtonStyle.Success),
-                        new ButtonBuilder()
-                            .setCustomId(`confirm_role_no_${type}_${selectedValue}_${targetRoleId}`)
-                            .setLabel("Non, annuler")
-                            .setStyle(ButtonStyle.Danger)
-                    );
-
-                    return interaction.editReply({ embeds: [confirmEmbed], components: [confirmButtons] }).catch(() => {});
-                };
-
-                // Helper pour obtenir les rôles d'une catégorie possédés par le membre
-                const getCategoryRolesToRemove = (categoryConfig) => {
-                    const roles = [];
-                    for (const key in categoryConfig) {
-                        const id = categoryConfig[key];
-                        if (id && member.roles.cache.has(id)) roles.push(id);
-                    }
-                    return roles;
-                };
-
-                // 1. GENRE
-                if (interaction.customId === "role_select_genre") {
-                    const roleId = config.ROLES_GENRE[selectedValue];
-                    
-                    let existingRole = null;
-                    for (const key in config.ROLES_GENRE) {
-                        const id = config.ROLES_GENRE[key];
-                        if (id && member.roles.cache.has(id)) {
-                            existingRole = member.roles.cache.get(id);
-                            break;
+                    // Retrait sécurisé des anciens rôles de la même catégorie
+                    if (categoryConfig) {
+                        for (const key in categoryConfig) {
+                            const id = categoryConfig[key];
+                            if (id && member.roles.cache.has(id)) {
+                                await member.roles.remove(id).catch(err => 
+                                    console.error(`[ROLE SYSTEM] Impossible de retirer le rôle ${id} :`, err.message)
+                                );
+                            }
                         }
                     }
 
-                    if (existingRole) {
-                        if (existingRole.id === roleId) {
-                            return sendResponseEmbed("Information", "Vous possédez déjà ce rôle.", true);
-                        }
-                        return askConfirmation("genre", existingRole.name, roleId);
-                    }
-
-                    const rolesToRemove = getCategoryRolesToRemove(config.ROLES_GENRE);
-                    if (rolesToRemove.length > 0) await member.roles.remove(rolesToRemove).catch(() => {});
-
-                    if (selectedValue !== "NON_PRECISE" && roleId) await member.roles.add(roleId).catch(() => {});
-                    return sendResponseEmbed("Profil Mis à Jour", "Votre identité a été enregistrée avec succès.", true);
-                }
-
-                // 2. PLATEFORME
-                if (interaction.customId === "role_select_plateforme") {
-                    const roleId = config.ROLES_PLATEFORME[selectedValue];
-                    if (!roleId || roleId.startsWith("ID_")) {
-                        return sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas configuré dans le bot.", false);
-                    }
-
-                    let existingRole = null;
-                    for (const key in config.ROLES_PLATEFORME) {
-                        const id = config.ROLES_PLATEFORME[key];
-                        if (id && member.roles.cache.has(id)) {
-                            existingRole = member.roles.cache.get(id);
-                            break;
-                        }
-                    }
-
-                    if (existingRole) {
-                        if (existingRole.id === roleId) {
-                            return sendResponseEmbed("Information", "Vous possédez déjà ce rôle.", true);
-                        }
-                        return askConfirmation("plateforme", existingRole.name, roleId);
-                    }
-
-                    const rolesToRemove = getCategoryRolesToRemove(config.ROLES_PLATEFORME);
-                    if (rolesToRemove.length > 0) await member.roles.remove(rolesToRemove).catch(() => {});
-
-                    await member.roles.add(roleId).catch(() => {});
-                    return sendResponseEmbed("Profil Mis à Jour", "Votre plateforme de jeu a été modifiée avec succès.", true);
-                }
-
-                // 3. NOTIFICATIONS
-                if (interaction.customId === "role_select_notifs") {
-                    const selectedValues = interaction.values;
-                    const rolesToAdd = [];
-                    const rolesToRemove = [];
-
-                    for (const key in config.ROLES_NOTIFS) {
-                        const roleId = config.ROLES_NOTIFS[key];
-                        if (!roleId || roleId.startsWith("ID_")) continue;
-
-                        if (selectedValues.includes(key)) {
-                            if (!member.roles.cache.has(roleId)) rolesToAdd.push(roleId);
-                        } else {
-                            if (member.roles.cache.has(roleId)) rolesToRemove.push(roleId);
-                        }
-                    }
-
-                    if (rolesToAdd.length > 0) await member.roles.add(rolesToAdd).catch(() => {});
-                    if (rolesToRemove.length > 0) await member.roles.remove(rolesToRemove).catch(() => {});
-
-                    return sendResponseEmbed("Préférences Mises à Jour", "Vos abonnements aux notifications ont été ajustés.", true);
-                }
-
-                // 4. DIVISION FORTNITE
-                if (interaction.customId === "role_select_division") {
-                    const roleId = config.ROLES_DIVISION[selectedValue];
-                    
-                    if (selectedValue === "DIV_1") {
-                        return sendResponseEmbed(
-                            "Vérification Requise — Division 1", 
-                            "L'accès au rôle **Division 1** nécessite une validation manuelle par le Staff.\n\nVeuillez ouvrir un ticket pour transmettre vos preuves de rang.",
-                            false
+                    // Ajout du nouveau rôle
+                    if (selectedValue !== "NON_PRECISE" && targetRoleId && targetRoleId !== "none") {
+                        await member.roles.add(targetRoleId).catch(err => 
+                            console.error(`[ROLE SYSTEM] Impossible d'ajouter le rôle ${targetRoleId} :`, err.message)
                         );
                     }
 
-                    if (!roleId || roleId.startsWith("ID_")) {
-                        return sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas configuré dans le bot.", false);
-                    }
+                    const successEmbed = new EmbedBuilder()
+                        .setColor(COLOR_GOLD)
+                        .setTitle(`${EMOJIS.CERTIFIED}  Profil Mis à Jour`)
+                        .setDescription("Votre changement de rôle a bien été effectué et enregistré.")
+                        .setFooter({ text: "HeLoRiA • Système de Profil" });
 
-                    let existingRole = null;
-                    for (const key in config.ROLES_DIVISION) {
-                        const id = config.ROLES_DIVISION[key];
-                        if (id && member.roles.cache.has(id)) {
-                            existingRole = member.roles.cache.get(id);
-                            break;
-                        }
-                    }
+                    return interaction.editReply({ embeds: [successEmbed], components: [] }).catch(() => {});
+                } else {
+                    const cancelEmbed = new EmbedBuilder()
+                        .setColor(COLOR_DARK)
+                        .setTitle("⚠️  Modification Annulée")
+                        .setDescription("Votre rôle actuel a été conservé sans modification.")
+                        .setFooter({ text: "HeLoRiA • Système de Profil" });
 
-                    if (existingRole) {
-                        if (existingRole.id === roleId) {
-                            return sendResponseEmbed("Information", "Vous possédez déjà ce rôle.", true);
-                        }
-                        return askConfirmation("division", existingRole.name, roleId);
-                    }
-
-                    const rolesToRemove = getCategoryRolesToRemove(config.ROLES_DIVISION);
-                    if (rolesToRemove.length > 0) await member.roles.remove(rolesToRemove).catch(() => {});
-
-                    await member.roles.add(roleId).catch(() => {});
-                    return sendResponseEmbed("Profil Mis à Jour", "Votre division compétitive a été mise à jour.", true);
+                    return interaction.editReply({ embeds: [cancelEmbed], components: [] }).catch(() => {});
                 }
-            } catch (error) {
-                console.error("Erreur lors de la gestion des rôles :", error);
+            } catch (err) {
+                console.error("[ROLE SYSTEM] Erreur lors du clic sur bouton de confirmation :", err);
             }
+        }
+
+        // -----------------------------------------------------
+        // B. GESTION DES MENUS DÉROULANTS
+        // -----------------------------------------------------
+        if (!interaction.isStringSelectMenu() || !interaction.customId.startsWith("role_select_")) return;
+
+        try {
+            await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
+            const member = interaction.member;
+            const selectedValue = interaction.values[0];
+
+            if (!member) return;
+
+            // Fonction de réponse rapide stylisée
+            const sendResponseEmbed = async (title, statusText, isSuccess = true) => {
+                const responseEmbed = new EmbedBuilder()
+                    .setColor(isSuccess ? COLOR_GOLD : COLOR_ERROR)
+                    .setTitle(`${isSuccess ? EMOJIS.CERTIFIED : "⚠️"}  ${title}`)
+                    .setDescription(statusText)
+                    .setFooter({ text: "HeLoRiA • Système de Profil" });
+
+                return interaction.editReply({ embeds: [responseEmbed], components: [] }).catch(() => {});
+            };
+
+            // Fonction de demande de confirmation par bouton
+            const askConfirmation = async (categoryShort, currentRoleName, targetRoleId) => {
+                const confirmEmbed = new EmbedBuilder()
+                    .setColor(COLOR_GOLD)
+                    .setTitle(`${EMOJIS.PREMIUM}  Modification de Rôle`)
+                    .setDescription(
+                        `Vous possédez déjà un rôle dans cette catégorie (**${currentRoleName}**).\n\n` +
+                        `**Voulez-vous vraiment remplacer votre rôle actuel par ce nouveau choix ?**`
+                    )
+                    .setFooter({ text: "HeLoRiA • Confirmation Requise" });
+
+                const safeTargetId = targetRoleId || "none";
+
+                const confirmButtons = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`cf_role_y_${categoryShort}_${selectedValue}_${safeTargetId}`)
+                        .setLabel("Oui, confirmer")
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`cf_role_n_${categoryShort}_${selectedValue}_${safeTargetId}`)
+                        .setLabel("Non, annuler")
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+                return interaction.editReply({ embeds: [confirmEmbed], components: [confirmButtons] }).catch(() => {});
+            };
+
+            // 1. DÉROULANT : GENRE
+            if (interaction.customId === "role_select_genre") {
+                if (!config.ROLES_GENRE) {
+                    return sendResponseEmbed("Configuration Manquante", "La configuration des rôles de genre est introuvable.", false);
+                }
+
+                const roleId = config.ROLES_GENRE[selectedValue];
+                let existingRole = null;
+
+                for (const key in config.ROLES_GENRE) {
+                    const id = config.ROLES_GENRE[key];
+                    if (id && member.roles.cache.has(id)) {
+                        existingRole = member.roles.cache.get(id);
+                        break;
+                    }
+                }
+
+                if (existingRole && existingRole.id !== roleId) {
+                    return askConfirmation("gnr", existingRole.name, roleId);
+                }
+
+                // Retrait des anciens rôles
+                for (const key in config.ROLES_GENRE) {
+                    const id = config.ROLES_GENRE[key];
+                    if (id && member.roles.cache.has(id)) {
+                        await member.roles.remove(id).catch(() => {});
+                    }
+                }
+
+                if (selectedValue !== "NON_PRECISE" && roleId) {
+                    await member.roles.add(roleId).catch(() => {});
+                }
+
+                return sendResponseEmbed("Profil Mis à Jour", "Votre genre a été enregistré avec succès.", true);
+            }
+
+            // 2. DÉROULANT : PLATEFORME
+            if (interaction.customId === "role_select_plateforme") {
+                if (!config.ROLES_PLATEFORME) {
+                    return sendResponseEmbed("Configuration Manquante", "La configuration des plateformes est introuvable.", false);
+                }
+
+                const roleId = config.ROLES_PLATEFORME[selectedValue];
+                if (!roleId || roleId.startsWith("ID_")) {
+                    return sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas encore configuré dans les fichiers du bot.", false);
+                }
+
+                let existingRole = null;
+                for (const key in config.ROLES_PLATEFORME) {
+                    const id = config.ROLES_PLATEFORME[key];
+                    if (id && member.roles.cache.has(id)) {
+                        existingRole = member.roles.cache.get(id);
+                        break;
+                    }
+                }
+
+                if (existingRole && existingRole.id !== roleId) {
+                    return askConfirmation("plt", existingRole.name, roleId);
+                }
+
+                for (const key in config.ROLES_PLATEFORME) {
+                    const id = config.ROLES_PLATEFORME[key];
+                    if (id && member.roles.cache.has(id)) {
+                        await member.roles.remove(id).catch(() => {});
+                    }
+                }
+
+                await member.roles.add(roleId).catch(() => {});
+                return sendResponseEmbed("Profil Mis à Jour", "Votre plateforme de jeu principale a été mise à jour.", true);
+            }
+
+            // 3. DÉROULANT : NOTIFICATIONS (CHOIX MULTIPLES)
+            if (interaction.customId === "role_select_notifs") {
+                if (!config.ROLES_NOTIFS) {
+                    return sendResponseEmbed("Configuration Manquante", "La configuration des notifications est introuvable.", false);
+                }
+
+                const selectedValues = interaction.values;
+
+                for (const key in config.ROLES_NOTIFS) {
+                    const roleId = config.ROLES_NOTIFS[key];
+                    if (!roleId || roleId.startsWith("ID_")) continue;
+
+                    if (selectedValues.includes(key)) {
+                        if (!member.roles.cache.has(roleId)) {
+                            await member.roles.add(roleId).catch(() => {});
+                        }
+                    } else {
+                        if (member.roles.cache.has(roleId)) {
+                            await member.roles.remove(roleId).catch(() => {});
+                        }
+                    }
+                }
+
+                return sendResponseEmbed("Préférences Mises à Jour", "Vos abonnements aux notifications ont été ajustés selon vos choix.", true);
+            }
+
+            // 4. DÉROULANT : DIVISION FORTNITE
+            if (interaction.customId === "role_select_division") {
+                if (!config.ROLES_DIVISION) {
+                    return sendResponseEmbed("Configuration Manquante", "La configuration des divisions est introuvable.", false);
+                }
+
+                const roleId = config.ROLES_DIVISION[selectedValue];
+
+                if (selectedValue === "DIV_1") {
+                    return sendResponseEmbed(
+                        "Vérification Requise — Division 1",
+                        "L'accès au rôle **Division 1** nécessite une validation manuelle par le Staff.\n\nVeuillez ouvrir un ticket support pour fournir vos preuves de niveau.",
+                        false
+                    );
+                }
+
+                if (!roleId || roleId.startsWith("ID_")) {
+                    return sendResponseEmbed("Configuration Incomplète", "Ce rôle n'est pas encore configuré dans les fichiers du bot.", false);
+                }
+
+                let existingRole = null;
+                for (const key in config.ROLES_DIVISION) {
+                    const id = config.ROLES_DIVISION[key];
+                    if (id && member.roles.cache.has(id)) {
+                        existingRole = member.roles.cache.get(id);
+                        break;
+                    }
+                }
+
+                if (existingRole && existingRole.id !== roleId) {
+                    return askConfirmation("div", existingRole.name, roleId);
+                }
+
+                for (const key in config.ROLES_DIVISION) {
+                    const id = config.ROLES_DIVISION[key];
+                    if (id && member.roles.cache.has(id)) {
+                        await member.roles.remove(id).catch(() => {});
+                    }
+                }
+
+                await member.roles.add(roleId).catch(() => {});
+                return sendResponseEmbed("Profil Mis à Jour", "Votre division compétitive a été enregistrée.", true);
+            }
+
+        } catch (error) {
+            console.error("[ROLE SYSTEM] Erreur lors du traitement de l'interaction de rôles :", error);
         }
     });
 };

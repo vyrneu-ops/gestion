@@ -17,6 +17,7 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages
     ],
+
     partials: [
         Partials.Message,
         Partials.Channel,
@@ -33,21 +34,42 @@ const roleManager = require('./modules/roleManager');
 const ticketSystem = require('./modules/ticketSystem');
 const welcomeManager = require('./modules/welcomeManager');
 const rosterObjective = require('./modules/rosterObjective');
+const statCounter = require('./modules/statCounter');
+
+// =====================================================
+// IMPORT DES MODULES D'EMBEDS
+// =====================================================
+
+const voiceInfo = require('./embeds/voiceInfo');
+const infoPack = require('./embeds/infoPack');
+const soutenir = require('./embeds/soutenir');
+const partenaire = require('./embeds/partenaire');
+const reglement = require('./embeds/reglement');
+const presentation = require('./embeds/presentation');
+const critereEsport = require('./embeds/critereEsport');
 
 // =====================================================
 // GESTION DU STOCKAGE DES IDS DE MESSAGES
 // =====================================================
 
-const STORE_PATH = path.join(__dirname, './data/embed_messages.json');
+const STORE_PATH = path.join(
+    __dirname,
+    './data/embed_messages.json'
+);
 
 if (!fs.existsSync(path.dirname(STORE_PATH))) {
-    fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true });
+    fs.mkdirSync(
+        path.dirname(STORE_PATH),
+        { recursive: true }
+    );
 }
 
 function loadEmbedStore() {
     try {
         if (fs.existsSync(STORE_PATH)) {
-            return JSON.parse(fs.readFileSync(STORE_PATH, 'utf-8'));
+            return JSON.parse(
+                fs.readFileSync(STORE_PATH, 'utf-8')
+            );
         }
     } catch (err) {
         console.error('[EMBED STORE] Erreur de lecture :', err);
@@ -57,26 +79,34 @@ function loadEmbedStore() {
 
 function saveEmbedStore(data) {
     try {
-        fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 4), 'utf-8');
+        fs.writeFileSync(
+            STORE_PATH,
+            JSON.stringify(data, null, 4),
+            'utf-8'
+        );
     } catch (err) {
         console.error('[EMBED STORE] Erreur d\'écriture :', err);
     }
 }
 
 // =====================================================
-// GESTION DES ERREURS GLOBALES
+// GESTION DES ERREURS GLOBALES (ANTI-CRASH)
 // =====================================================
 
 client.on('error', (error) => {
     console.error('[DISCORD API ERROR]', error);
 });
 
-process.on('unhandledRejection', (reason) => {
-    console.error('[UNHANDLED REJECTION]', reason);
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[ANTI-CRASH] Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-process.on('uncaughtException', (error) => {
-    console.error('[UNCAUGHT EXCEPTION]', error);
+process.on('uncaughtException', (error, origin) => {
+    console.error('[ANTI-CRASH] Uncaught Exception:', error, 'origin:', origin);
+});
+
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+    console.error('[ANTI-CRASH] Uncaught Exception Monitor:', error, 'origin:', origin);
 });
 
 // =====================================================
@@ -100,16 +130,20 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     const isStreaming = newState.streaming;
     const wasStreaming = oldState.streaming;
 
+    // Détection uniquement au lancement du partage d'écran
     if (isStreaming && !wasStreaming) {
         const hasNoStreamRole = newState.member.roles.cache.has(NO_STREAM_ROLE_ID);
 
         if (!hasNoStreamRole) return;
 
         try {
+            // Déconnexion immédiate du salon vocal
             await newState.disconnect();
+
+            // Envoi du MP
             await newState.member.send(
-                'Attention : tu possèdes le rôle **no stream**, tu n\'es donc pas autorisé à lancer un partage d\'écran.'
-            ).catch(() => console.log(`[NO STREAM] Impossible d'envoyer un MP à ${newState.member.user.tag}.`));
+                `Attention : tu possèdes le rôle **no stream**, tu n'es donc pas autorisé à lancer un partage d'écran.`
+            ).catch(() => null);
 
         } catch (err) {
             console.error(`[NO STREAM] Erreur pour ${newState.member.user.tag} :`, err.message);
@@ -122,59 +156,90 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 // =====================================================
 
 client.once('ready', async (c) => {
+
     console.log('\n==========================================');
     console.log(`[SYSTEM] Connecté en tant que : ${c.user.tag}`);
     console.log('==========================================\n');
 
+    // -------------------------------------------------
     // CHARGEMENT DES MODULES
-    const modules = [
-        { name: 'voiceManager', fn: voiceManager },
-        { name: 'welcomeManager', fn: welcomeManager },
-        { name: 'roleManager', fn: roleManager },
-        { name: 'ticketSystem', fn: ticketSystem },
-        { name: 'rosterObjective', fn: rosterObjective }
-    ];
+    // -------------------------------------------------
 
-    for (const mod of modules) {
-        try {
-            if (typeof mod.fn === 'function') {
-                mod.fn(client);
-                console.log(`[MODULES] Module ${mod.name} chargé.`);
-            }
-        } catch (err) {
-            console.error(`[MODULE ERROR] Erreur au chargement du module ${mod.name} :`, err);
+    try {
+        if (typeof voiceManager === 'function') {
+            voiceManager(client);
+            console.log('[MODULES] VoiceManager chargé.');
         }
+
+        if (typeof welcomeManager === 'function') {
+            welcomeManager(client);
+            console.log('[MODULES] WelcomeManager chargé.');
+        }
+
+        if (typeof roleManager === 'function') {
+            roleManager(client);
+            console.log('[MODULES] RoleManager chargé.');
+        }
+
+        if (typeof ticketSystem === 'function') {
+            ticketSystem(client);
+            console.log('[MODULES] TicketSystem chargé.');
+        }
+
+        if (typeof rosterObjective === 'function') {
+            rosterObjective(client);
+            console.log('[MODULES] RosterObjective chargé.');
+        }
+
+        if (typeof statCounter === 'function') {
+            statCounter(client);
+            console.log('[MODULES] StatCounter chargé.');
+        }
+
+    } catch (err) {
+        console.error('[MODULE ERROR] Erreur au chargement des modules :', err);
     }
 
+    // -------------------------------------------------
     // EMBEDS
+    // -------------------------------------------------
+
     await sendOrUpdateEmbeds();
 
-    // STATUT DYNAMIQUE (Affichage statut Maintenance)
+    // -------------------------------------------------
+    // STATUT DYNAMIQUE
+    // -------------------------------------------------
+
     let statusIndex = 0;
 
     setInterval(() => {
-        const totalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
+        const totalMembers = client.guilds.cache.reduce(
+            (acc, guild) => acc + guild.memberCount,
+            0
+        );
 
         const activities = [
             {
                 name: 'CustomStatus',
-                state: '🔴 Bot actuellement en maintenance',
+                state: `${totalMembers} membres sur le serveur`,
                 type: ActivityType.Custom
             },
             {
                 name: 'CustomStatus',
-                state: `${totalMembers} membres • HeLoRiA`,
+                state: 'Dev By Logs',
                 type: ActivityType.Custom
             }
         ];
 
         client.user.setPresence({
             activities: [activities[statusIndex]],
-            status: 'dnd' // Statut 'Ne pas déranger' (rouge) pour indiquer la maintenance
+            status: 'idle'
         });
 
         statusIndex = (statusIndex + 1) % activities.length;
+
     }, 15000);
+
 });
 
 // =====================================================
@@ -185,7 +250,7 @@ const app = express();
 const PORT = process.env.PORT || 3002;
 
 app.get('/', (req, res) => {
-    res.send('Bot Gestion HeLoRiA — Mode Maintenance Actif');
+    res.send('Bot Gestion HeLoRiA — Actif');
 });
 
 app.listen(PORT, () => {

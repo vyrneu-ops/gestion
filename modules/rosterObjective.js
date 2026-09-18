@@ -7,11 +7,28 @@ const path = require('path');
 // =====================================================
 
 const ROSTER_CHANNEL_ID = '1534579701421445242';
-const EMBED_COLOR = '#D4AF37';
+const EMBED_COLOR = '#D4AF37'; // Or prestige HeLoRiA
 const FOOTER_TEXT = 'HeLoRiA • #RiseSoarConquer';
 
 const STORE_DIR = path.join(__dirname, '../data');
 const STORE_PATH = path.join(STORE_DIR, 'roster_objective.json');
+
+// Emojis d'organisation et de pôles
+const EMOJIS = {
+    GOLD_STAR: '⭐',
+    CROWN: '👑',
+    SHIELD: '🛡️',
+    MOD: '🔨',
+    TEST: '🧪',
+    GAME: '🎮',
+    MEDIA: '🎬',
+    TV: '📺',
+    TROPHY: '🏆',
+    GRADUATION: '🎓',
+    BOOK: '📚',
+    SPARKLES: '✨',
+    DOT: '▪️'
+};
 
 // =====================================================
 // RÔLES DU ROSTER
@@ -19,53 +36,47 @@ const STORE_PATH = path.join(STORE_DIR, 'roster_objective.json');
 
 const ROSTER_POLES = [
     {
-        name: 'PÔLE CEO',
+        name: `${EMOJIS.CROWN} PÔLE CEO`,
         roles: [
             { name: 'CEO', id: '1532015045800628244' }
         ]
     },
-
     {
-        name: 'PÔLE DIRECTION',
+        name: `${EMOJIS.GOLD_STAR} PÔLE DIRECTION`,
         roles: [
             { name: 'Directeur(trice) général', id: '1532015039806963763' }
         ]
     },
-
     {
-        name: 'PÔLE ADMINISTRATION',
+        name: `${EMOJIS.SHIELD} PÔLE ADMINISTRATION`,
         roles: [
             { name: 'Responsable administration', id: '1532015034572738721' },
             { name: 'Administrateur', id: '1532015029480853625' }
         ]
     },
-
     {
-        name: 'PÔLE MODÉRATION',
+        name: `${EMOJIS.MOD} PÔLE MODÉRATION`,
         roles: [
             { name: 'Responsable modération', id: '1532015000426905633' },
             { name: 'Modérateur', id: '1532014997842952202' }
         ]
     },
-
     {
-        name: 'PÔLE TEST MODÉRATEUR',
+        name: `${EMOJIS.TEST} PÔLE TEST MODÉRATEUR`,
         roles: [
             { name: 'Test modérateur', id: '1532014992407269386' }
         ]
     },
-
     {
-        name: 'PÔLE FORTNITE',
+        name: `${EMOJIS.GAME} PÔLE FORTNITE`,
         roles: [
             { name: 'Directeur(trice) Fortnite', id: '1532014983305498684' },
             { name: 'Manager Esports', id: '1532014980063428730' },
             { name: 'Coach', id: '1532014976687145104' }
         ]
     },
-
     {
-        name: 'PÔLE AUDIOVISUEL',
+        name: `${EMOJIS.MEDIA} PÔLE AUDIOVISUEL`,
         roles: [
             { name: 'Monteur', id: '1532014970210881607' },
             { name: 'Graphiste', id: '1532014967728115813' },
@@ -74,50 +85,39 @@ const ROSTER_POLES = [
             { name: 'Mini-maker', id: '1532014962179051590' }
         ]
     },
-
     {
-        name: 'PÔLE WEB TV',
+        name: `${EMOJIS.TV} PÔLE WEB TV`,
         roles: [
             { name: 'Régisseur(euse)', id: '1532014951709802566' },
             { name: 'Créateur de contenu', id: '1532014948870393887' },
             { name: 'Animateur(trice)', id: '1532014946219458630' }
         ]
     },
-
     {
-        name: 'PÔLE E-SPORT',
+        name: `${EMOJIS.TROPHY} PÔLE E-SPORT`,
         roles: [
             { name: 'E-sport', id: '1532014940569735299' }
         ]
     },
-
     {
-        name: 'PÔLE ACADÉMIQUE',
+        name: `${EMOJIS.GRADUATION} PÔLE ACADÉMIQUE`,
         roles: [
             { name: 'Académique', id: '1532014932630044873' }
         ]
     },
-
     {
-        name: 'PÔLE FORMATION',
+        name: `${EMOJIS.BOOK} PÔLE FORMATION`,
         roles: [
             { name: 'Centre de formation', id: '1532014926623674573' }
         ]
     },
-
     {
-        name: 'PÔLE ESPOIR',
+        name: `${EMOJIS.SPARKLES} PÔLE ESPOIR`,
         roles: [
             { name: 'Espoir', id: '1532014920361574594' }
         ]
     }
 ];
-
-// =====================================================
-// GRINDERS — EXCLUS DE L'OBJECTIF
-// =====================================================
-
-const GRINDER_ROLE_IDS = [];
 
 // =====================================================
 // STOCKAGE
@@ -131,7 +131,6 @@ function ensureStore() {
 
 function loadStore() {
     ensureStore();
-
     try {
         if (fs.existsSync(STORE_PATH)) {
             return JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
@@ -139,100 +138,95 @@ function loadStore() {
     } catch (error) {
         console.error('[ROSTER] Erreur de lecture :', error);
     }
-
     return {};
 }
 
 function saveStore(data) {
     ensureStore();
-
     try {
-        fs.writeFileSync(
-            STORE_PATH,
-            JSON.stringify(data, null, 4),
-            'utf8'
-        );
+        fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 4), 'utf8');
     } catch (error) {
         console.error('[ROSTER] Erreur de sauvegarde :', error);
     }
 }
 
 // =====================================================
-// MEMBRES
+// FONCTIONS DE FORMATAGE
 // =====================================================
 
 function getRoleMembers(guild, roleId) {
     const role = guild.roles.cache.get(roleId);
-
     if (!role) return [];
 
-    return [...role.members.values()]
-        .sort((a, b) =>
-            a.displayName.localeCompare(
-                b.displayName,
-                'fr',
-                { sensitivity: 'base' }
-            )
-        );
+    return [...role.members.values()].sort((a, b) =>
+        a.displayName.localeCompare(b.displayName, 'fr', { sensitivity: 'base' })
+    );
 }
 
 function formatMembers(members) {
     if (members.length === 0) {
-        return '*Aucune personne actuellement.*';
+        return `* standard — aucun membre actuellement*`;
     }
-
-    return members
-        .map(member => `— <@${member.id}>`)
-        .join('\n');
+    return members.map(m => `${EMOJIS.DOT} <@${m.id}>`).join('\n');
 }
 
 // =====================================================
-// EMBED
+// DÉFINITION DE L'EMBED
 // =====================================================
 
 function buildEmbed(guild) {
+    let totalRosterMembers = new Set();
+
+    // Calcul du total global de membres uniques
+    for (const pole of ROSTER_POLES) {
+        for (const role of pole.roles) {
+            const members = getRoleMembers(guild, role.id);
+            for (const m of members) totalRosterMembers.add(m.id);
+        }
+    }
+
     const embed = new EmbedBuilder()
         .setColor(EMBED_COLOR)
-        .setTitle('ROSTER OBJECTIVE')
-        .setFooter({
-            text: FOOTER_TEXT
-        });
+        .setTitle('🏆 ORGANIGRAMME & ROSTER OFFICIEL')
+        .setDescription(
+            `Bienvenue sur l'organigramme officiel de la **Team HeLoRiA**.\n` +
+            `Retrouvez l'ensemble de l'équipe d'encadrement, du staff et des pôles compétitifs.\n\n` +
+            `📊 **Effectif total du Roster :** \`${totalRosterMembers.size} Membre(s)\`\n` +
+            `──────────────────────────────`
+        )
+        .setFooter({ text: FOOTER_TEXT })
+        .setTimestamp();
 
     for (const pole of ROSTER_POLES) {
-        const uniqueMembers = new Map();
+        const uniqueMembersPole = new Set();
 
         for (const role of pole.roles) {
             const members = getRoleMembers(guild, role.id);
-
-            for (const member of members) {
-                uniqueMembers.set(member.id, member);
-            }
+            for (const m of members) uniqueMembersPole.add(m.id);
         }
 
-        const count = uniqueMembers.size;
-        const label = count === 1 ? 'PERSONNE' : 'PERSONNES';
+        const count = uniqueMembersPole.size;
+        const countLabel = count > 1 ? `${count} membres` : `${count} membre`;
 
-        let content = '';
+        let poleContent = '';
 
         for (const role of pole.roles) {
             const members = getRoleMembers(guild, role.id);
-
-            content += `**${role.name}**\n`;
-            content += `${formatMembers(members)}\n\n`;
+            poleContent += `**${role.name.toUpperCase()}**\n${formatMembers(members)}\n\n`;
         }
 
         embed.addFields({
-            name: `${pole.name} — ${count} ${label}`,
-            value: content.trim(),
+            name: `${pole.name} \`[ ${countLabel} ]\``,
+            value: poleContent.trim(),
             inline: false
         });
     }
 
     embed.addFields({
-        name: 'OUTSIDE OBJECTIVE',
-        value:
-            '**Grinder 1 to Grinder 5**\n' +
-            '*These roles are tracked separately and are not included in the roster objective.*',
+        name: '📌 INFORMATION COMPLÉMENTAIRE',
+        value: 
+            `**Section Grinders (Division 1 à 5)**\n` +
+            `*Ces rôles sont suivis indépendamment sur le serveur et ne figurent pas dans cet organigramme principal.*`,
         inline: false
     });
 
@@ -240,7 +234,7 @@ function buildEmbed(guild) {
 }
 
 // =====================================================
-// MISE À JOUR
+// GESTION DU RAFRAÎCHISSEMENT
 // =====================================================
 
 let updateTimeout = null;
@@ -248,16 +242,13 @@ let updateRunning = false;
 
 async function updateRoster(client, guild) {
     if (updateRunning) return;
-
     updateRunning = true;
 
     try {
-        const channel = await client.channels
-            .fetch(ROSTER_CHANNEL_ID)
-            .catch(() => null);
+        const channel = await client.channels.fetch(ROSTER_CHANNEL_ID).catch(() => null);
 
         if (!channel || !channel.isTextBased()) {
-            console.error('[ROSTER] Salon introuvable ou invalide.');
+            console.error('[ROSTER] Salon introuvable ou type de salon non pris en charge.');
             return;
         }
 
@@ -265,13 +256,10 @@ async function updateRoster(client, guild) {
         let message = null;
 
         if (store.messageId) {
-            message = await channel.messages
-                .fetch(store.messageId)
-                .catch(() => null);
+            message = await channel.messages.fetch(store.messageId).catch(() => null);
         }
 
         const embed = buildEmbed(guild);
-
         const membersToMention = new Set();
 
         for (const pole of ROSTER_POLES) {
@@ -287,22 +275,12 @@ async function updateRoster(client, guild) {
         if (message) {
             await message.edit({
                 embeds: [embed],
-                allowedMentions: {
-                    parse: [],
-                    users: allowedUsers,
-                    roles: [],
-                    repliedUser: false
-                }
+                allowedMentions: { parse: [], users: allowedUsers, roles: [], repliedUser: false }
             });
         } else {
             message = await channel.send({
                 embeds: [embed],
-                allowedMentions: {
-                    parse: [],
-                    users: allowedUsers,
-                    roles: [],
-                    repliedUser: false
-                }
+                allowedMentions: { parse: [], users: allowedUsers, roles: [], repliedUser: false }
             });
 
             saveStore({
@@ -312,20 +290,14 @@ async function updateRoster(client, guild) {
         }
 
     } catch (error) {
-        console.error('[ROSTER] Erreur :', error);
+        console.error('[ROSTER] Erreur lors du rafraîchissement :', error);
     } finally {
         updateRunning = false;
     }
 }
 
-// =====================================================
-// DÉLAI DE MISE À JOUR
-// =====================================================
-
 function scheduleUpdate(client, guild) {
-    if (updateTimeout) {
-        clearTimeout(updateTimeout);
-    }
+    if (updateTimeout) clearTimeout(updateTimeout);
 
     updateTimeout = setTimeout(() => {
         updateTimeout = null;
@@ -334,66 +306,45 @@ function scheduleUpdate(client, guild) {
 }
 
 // =====================================================
-// INITIALISATION
+// INITIALISATION DU MODULE
 // =====================================================
 
 module.exports = async function rosterObjective(client) {
-
-    const channel = await client.channels
-        .fetch(ROSTER_CHANNEL_ID)
-        .catch(() => null);
+    const channel = await client.channels.fetch(ROSTER_CHANNEL_ID).catch(() => null);
 
     if (!channel || !channel.guild) {
-        console.error('[ROSTER] Impossible de trouver le serveur.');
+        console.error('[ROSTER] Serveur introuvable.');
         return;
     }
 
     const guild = channel.guild;
-
-    // Charge les membres pour avoir les rôles à jour
     await guild.members.fetch();
 
-    // Première génération
     await updateRoster(client, guild);
+    console.log(`[ROSTER] Module initialisé sur ${guild.name}.`);
 
-    console.log(`[ROSTER] Système actif sur ${guild.name}.`);
+    client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
+        const relevantRoles = new Set(
+            ROSTER_POLES.flatMap(pole => pole.roles.map(role => role.id))
+        );
 
-    // Détection des changements de rôles
-    client.on(
-        Events.GuildMemberUpdate,
-        (oldMember, newMember) => {
+        const oldRoles = new Set(oldMember.roles.cache.keys());
+        const newRoles = new Set(newMember.roles.cache.keys());
 
-            const relevantRoles = new Set(
-                ROSTER_POLES.flatMap(pole =>
-                    pole.roles.map(role => role.id)
-                )
-            );
+        const changedRoles = new Set([...oldRoles, ...newRoles]);
+        const affectsRoster = [...changedRoles].some(roleId => relevantRoles.has(roleId));
 
-            const oldRoles = new Set(oldMember.roles.cache.keys());
-            const newRoles = new Set(newMember.roles.cache.keys());
+        if (!affectsRoster) return;
 
-            const changedRoles = new Set([
-                ...oldRoles,
-                ...newRoles
-            ]);
+        scheduleUpdate(client, newMember.guild);
+    });
 
-            const affectsRoster = [...changedRoles].some(
-                roleId => relevantRoles.has(roleId)
-            );
-
-            if (!affectsRoster) return;
-
-            scheduleUpdate(client, newMember.guild);
-        }
-    );
-
-    // Vérification de sécurité toutes les 30 secondes
     setInterval(async () => {
         try {
             await guild.members.fetch();
             await updateRoster(client, guild);
         } catch (error) {
-            console.error('[ROSTER] Vérification :', error);
+            console.error('[ROSTER] Erreur lors de la mise à jour automatique :', error);
         }
     }, 30000);
 };
