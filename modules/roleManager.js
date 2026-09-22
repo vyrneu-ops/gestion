@@ -24,8 +24,6 @@ const EMOJIS = {
 };
 
 module.exports = (client) => {
-    console.log("[ROLE SYSTEM] Module d'auto-rôle HeLoRiA prêt & sécurisé.");
-
     // =====================================================
     // INITIALISATION DU PANNEAU (+setup-roles)
     // =====================================================
@@ -152,7 +150,7 @@ module.exports = (client) => {
                 await msg.channel.send({ embeds: [embedDivision], components: [menuDivision] });
 
             } catch (error) {
-                console.error("[ROLE SYSTEM] Erreur lors de la création du panneau de rôles :", error);
+                // Erreur ignorée
             }
         }
     });
@@ -190,18 +188,14 @@ module.exports = (client) => {
                         for (const key in categoryConfig) {
                             const id = categoryConfig[key];
                             if (id && member.roles.cache.has(id)) {
-                                await member.roles.remove(id).catch(err => 
-                                    console.error(`[ROLE SYSTEM] Impossible de retirer le rôle ${id} :`, err.message)
-                                );
+                                await member.roles.remove(id).catch(() => {});
                             }
                         }
                     }
 
                     // Ajout du nouveau rôle
                     if (selectedValue !== "NON_PRECISE" && targetRoleId && targetRoleId !== "none") {
-                        await member.roles.add(targetRoleId).catch(err => 
-                            console.error(`[ROLE SYSTEM] Impossible d'ajouter le rôle ${targetRoleId} :`, err.message)
-                        );
+                        await member.roles.add(targetRoleId).catch(() => {});
                     }
 
                     const successEmbed = new EmbedBuilder()
@@ -221,7 +215,7 @@ module.exports = (client) => {
                     return await interaction.editReply({ embeds: [cancelEmbed], components: [] }).catch(() => {});
                 }
             } catch (err) {
-                console.error("[ROLE SYSTEM] Erreur lors du clic sur bouton de confirmation :", err);
+                // Erreur ignorée
             }
         }
 
@@ -415,7 +409,7 @@ module.exports = (client) => {
             }
 
         } catch (error) {
-            console.error("[ROLE SYSTEM] Erreur lors du traitement de l'interaction de rôles :", error);
+            // Erreur ignorée
         }
     });
 };

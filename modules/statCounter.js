@@ -21,10 +21,7 @@ module.exports = (client) => {
         try {
             const channel = await client.channels.fetch(CHANNEL_ID).catch(() => null);
             
-            if (!channel) {
-                console.error(`[StatCounter] Salon introuvable avec l'ID : ${CHANNEL_ID}`);
-                return;
-            }
+            if (!channel) return;
 
             // Récupère le nombre total de membres (humains + bots)
             const count = channel.guild.memberCount;
@@ -33,15 +30,9 @@ module.exports = (client) => {
             // Modification uniquement si le nom a changé
             if (channel.name !== newName) {
                 await channel.setName(newName);
-                console.log(`[StatCounter] Compteur mis à jour : ${count} membres.`);
             }
         } catch (error) {
-            // Gestion des erreurs d'API (Rate Limit Discord : max 2 renommages par 10 min)
-            if (error.code === 429) {
-                console.warn(`[StatCounter] Rate Limit atteint. Prochaine tentative dans quelques minutes.`);
-            } else {
-                console.error(`[StatCounter] Erreur lors de la mise à jour :`, error.message);
-            }
+            // Erreur ignorée
         } finally {
             isUpdating = false;
 
