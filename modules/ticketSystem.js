@@ -8,8 +8,7 @@ const {
     ChannelType,
     ModalBuilder,
     TextInputBuilder,
-    TextInputStyle,
-    RoleSelectMenuBuilder
+    TextInputStyle
 } = require("discord.js");
 
 const fs = require("fs");
@@ -38,7 +37,7 @@ const EMOJIS = {
     rules: "<:580437rules:1537583160345366578>"
 };
 
-// --- ROLES & CANAUX CONSTANTS ---
+// --- CANAUX CONSTANTS ---
 const LOGS_CHANNEL = "1535306876164640920";
 const ARCHIVE_CHANNEL = "1541230358526304256";
 const AVIS_CHANNEL = "1541544133171347710";
@@ -46,14 +45,11 @@ const DB_PATH = path.join(__dirname, "../data/ticket_database.json");
 
 // Mappage des rôles spécifiques de pôle aux rôles principaux d'appartenance
 const ROLE_MAPPING = {
-    // Pôle Grinder -> Rôle Global Grinder
     grinder1: { roleId: config.ROLES_POLES?.grinder1, mainPoleId: config.ROLES_POLES?.main_grinder },
     grinder2: { roleId: config.ROLES_POLES?.grinder2, mainPoleId: config.ROLES_POLES?.main_grinder },
     grinder3: { roleId: config.ROLES_POLES?.grinder3, mainPoleId: config.ROLES_POLES?.main_grinder },
     grinder4: { roleId: config.ROLES_POLES?.grinder4, mainPoleId: config.ROLES_POLES?.main_grinder },
     grinder5: { roleId: config.ROLES_POLES?.grinder5, mainPoleId: config.ROLES_POLES?.main_grinder },
-    
-    // Autres Pôles
     espoir: { roleId: config.ROLES_POLES?.espoir, mainPoleId: config.ROLES_POLES?.main_espoir },
     formation: { roleId: config.ROLES_POLES?.formation, mainPoleId: config.ROLES_POLES?.main_formation },
     academique: { roleId: config.ROLES_POLES?.academique, mainPoleId: config.ROLES_POLES?.main_academique },
@@ -131,7 +127,7 @@ async function fetchFortnitePR(epicUsername) {
             }
         }
         return { prEU };
-    } catch (err) {
+    } catch {
         return { error: "API_CRASH" };
     }
 }
@@ -155,6 +151,87 @@ async function getCategoryForType(guild, type) {
         }
     }
     return null;
+}
+
+// --- FONCTION SUPRÊME DE CLÔTURE & SUPPRESSION ---
+async function closeTicketSystem(channel, client, context, closedByUser, sendReview = true) {
+    try {
+        const guild = channel.guild;
+        const db = readDB();
+        const ticketData = context || db.tickets[channel.id];
+
+        // 1. Suppression du salon vocal s'il existe
+        if (ticketData?.voiceChannelId) {
+            const vc = await guild.channels.fetch(ticketData.voiceChannelId).catch(() => null);
+            if (vc) await vc.delete().catch(() => {});
+        }
+
+        // 2. Génération du Transcript HTML
+        let transcriptAttachment = null;
+        try {
+            transcriptAttachment = await discordTranscripts.createTranscript(channel, {
+                limit: -1,
+                returnName: `transcript-${channel.name}.html`,
+                poweredBy: false
+            });
+        } catch (err) {
+            console.error("[TRANSCRIPT ERROR]", err);
+        }
+
+        // 3. Envoi du transcript aux salons d'archive/logs
+        const logChannel = await guild.channels.fetch(LOGS_CHANNEL).catch(() => null);
+        const archiveChannel = await guild.channels.fetch(ARCHIVE_CHANNEL).catch(() => null);
+
+        const summaryEmbed = new EmbedBuilder()
+            .setColor("#2F3136")
+            .setTitle(`${EMOJIS.lock} TICKET FERMÉ — ${channel.name}`)
+            .addFields(
+                { name: "Propriétaire", value: ticketData ? `<@${ticketData.userId}> (\`${ticketData.userId}\`)` : "Inconnu", inline: true },
+                { name: "Fermé par", value: closedByUser ? `${closedByUser} (\`${closedByUser.id}\`)` : "Système", inline: true },
+                { name: "Pris en charge par", value: ticketData?.claimedBy ? `<@${ticketData.claimedBy}>` : "Non pris en charge", inline: true }
+            )
+            .setTimestamp();
+
+        if (logChannel && typeof logChannel.send === "function") {
+            await logChannel.send({ embeds: [summaryEmbed], files: transcriptAttachment ? [transcriptAttachment] : [] }).catch(console.error);
+        }
+        if (archiveChannel && typeof archiveChannel.send === "function") {
+            await archiveChannel.send({ embeds: [summaryEmbed], files: transcriptAttachment ? [transcriptAttachment] : [] }).catch(console.error);
+        }
+
+        // 4. Envoi de la demande d'avis en MP à l'utilisateur
+        if (sendReview && ticketData?.userId) {
+            const targetUser = await client.users.fetch(ticketData.userId).catch(() => null);
+            if (targetUser) {
+                const staffId = ticketData.claimedBy || (closedByUser ? closedByUser.id : client.user.id);
+                const reviewEmbed = new EmbedBuilder()
+                    .setColor("#2F3136")
+                    .setTitle(`${EMOJIS.ticket} ÉVALUATION DE VOTRE SUPPORT`)
+                    .setDescription(`Votre ticket **${channel.name}** a été fermé.\nMerci de prendre un instant pour évaluer la prise en charge de votre demande par l'équipe.`);
+
+                const ratingRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`rate_1_${staffId}`).setLabel("1 ⭐").setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId(`rate_2_${staffId}`).setLabel("2 ⭐").setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`rate_3_${staffId}`).setLabel("3 ⭐").setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`rate_4_${staffId}`).setLabel("4 ⭐").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`rate_5_${staffId}`).setLabel("5 ⭐").setStyle(ButtonStyle.Success)
+                );
+
+                await targetUser.send({ embeds: [reviewEmbed], components: [ratingRow] }).catch(() => {});
+            }
+        }
+
+        // 5. Nettoyage DB
+        if (db.tickets[channel.id]) {
+            delete db.tickets[channel.id];
+            writeDB(db);
+        }
+
+        // 6. Suppression du salon textuel
+        setTimeout(() => channel.delete().catch(() => {}), 1500);
+    } catch (err) {
+        console.error("[CLOSE TICKET ERROR]", err);
+    }
 }
 
 module.exports = async (client) => {
@@ -255,7 +332,7 @@ module.exports = async (client) => {
                 const guildInstance = client.guilds.cache.first();
                 if (guildInstance) {
                     const reviewLogs = await guildInstance.channels.fetch(AVIS_CHANNEL).catch(() => null);
-                    if (reviewLogs) await reviewLogs.send({ embeds: [reviewEmbed] });
+                    if (reviewLogs && typeof reviewLogs.send === "function") await reviewLogs.send({ embeds: [reviewEmbed] });
                 }
 
                 return i.editReply({ content: `${EMOJIS.certified} Merci ! Votre évaluation a bien été enregistrée.` });
@@ -337,7 +414,6 @@ module.exports = async (client) => {
                 };
                 writeDB(db);
 
-                // Construction de l'embed avec les réponses du formulaire
                 const welcomeEmbed = new EmbedBuilder()
                     .setColor("#2F3136")
                     .setTitle(`${EMOJIS.ticket} NOUVEAU TICKET — ${type.toUpperCase()}`)
@@ -364,7 +440,6 @@ module.exports = async (client) => {
                     welcomeEmbed.addFields({ name: "Description", value: i.fields.getTextInputValue("subject") });
                 }
 
-                // BOUTONS DE GESTION DU TICKET
                 const row1 = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId("claim").setLabel("Prendre en charge").setStyle(ButtonStyle.Primary).setEmoji(EMOJIS.mod),
                     new ButtonBuilder().setCustomId("close_with_review").setLabel("Fermer").setStyle(ButtonStyle.Secondary).setEmoji(EMOJIS.lock),
@@ -407,7 +482,7 @@ module.exports = async (client) => {
 
             // --- CRÉATION DE SALON VOCAL ASSOCIÉ ---
             if (i.customId === "create_voice_channel") {
-                if (context.voiceChannelId) return i.reply({ content: `${EMOJIS.warning} Un salon vocal existe déjà pour ce ticket.`, ephemeral: true });
+                if (context && context.voiceChannelId) return i.reply({ content: `${EMOJIS.warning} Un salon vocal existe déjà pour ce ticket.`, ephemeral: true });
 
                 await i.deferReply({ ephemeral: true });
                 const voiceChannel = await i.guild.channels.create({
@@ -417,8 +492,10 @@ module.exports = async (client) => {
                     permissionOverwrites: i.channel.permissionOverwrites.cache.map(p => p)
                 });
 
-                context.voiceChannelId = voiceChannel.id;
-                writeDB(db);
+                if (context) {
+                    context.voiceChannelId = voiceChannel.id;
+                    writeDB(db);
+                }
 
                 return i.editReply({ content: `${EMOJIS.certified} Salon vocal créé : ${voiceChannel}` });
             }
@@ -478,7 +555,21 @@ module.exports = async (client) => {
             // --- CLAIM ---
             if (i.customId === "claim") {
                 await i.deferUpdate();
-                db.tickets[i.channel.id].claimedBy = i.user.id;
+                if (!db.tickets[i.channel.id]) {
+                    db.tickets[i.channel.id] = {
+                        userId: i.user.id,
+                        username: i.user.username,
+                        type: "inconnu",
+                        createdAt: Date.now(),
+                        lastActivity: Date.now(),
+                        messageCount: 0,
+                        status: "open",
+                        claimedBy: i.user.id,
+                        voiceChannelId: null
+                    };
+                } else {
+                    db.tickets[i.channel.id].claimedBy = i.user.id;
+                }
                 writeDB(db);
                 await i.channel.setName(`claim-${i.channel.name}`.slice(0, 100)).catch(() => {});
                 return i.channel.send({ embeds: [new EmbedBuilder().setColor("#2F3136").setDescription(`${EMOJIS.mod} Pris en charge par **${i.user.username}**.`)] });
@@ -604,85 +695,3 @@ module.exports = async (client) => {
         }
     });
 };
-
-// --- FONCTION SUPRÊME DE CLÔTURE & SUPPRESSION ---
-async function closeTicketSystem(channel, client, context, staffUser, sendReviewPrompt) {
-    try {
-        const db = readDB();
-
-        // 1. Suppression du vocal s'il existe
-        if (context?.voiceChannelId) {
-            const vc = await channel.guild.channels.fetch(context.voiceChannelId).catch(() => null);
-            if (vc) await vc.delete().catch(() => {});
-        }
-
-        // 2. Génération du Transcript HTML
-        const attachment = await discordTranscripts.createTranscript(channel, {
-            limit: -1,
-            returnType: "attachment",
-            filename: `transcript-${channel.name}.html`,
-            saveImages: true,
-            poweredBy: false
-        }).catch(() => null);
-
-        // 3. Incrémentation des statistiques pour le membre du staff qui ferme/claim
-        const claimedOrStaffId = context?.claimedBy || staffUser.id;
-        if (!db.stats[claimedOrStaffId]) db.stats[claimedOrStaffId] = { closedTickets: 0, reviews: [] };
-        db.stats[claimedOrStaffId].closedTickets += 1;
-
-        // 4. Construction de l'embed de Log
-        const logEmbed = new EmbedBuilder()
-            .setColor("#ED4245")
-            .setTitle(`${EMOJIS.lock} TICKET FERMÉ — ${channel.name}`)
-            .addFields(
-                { name: "Demandeur", value: context ? `<@${context.userId}> (\`${context.userId}\`)` : "Inconnu", inline: true },
-                { name: "Fermé par", value: `${staffUser} (\`${staffUser.id}\`)`, inline: true },
-                { name: "Pris en charge par", value: context?.claimedBy ? `<@${context.claimedBy}>` : "Non revendiqué", inline: true },
-                { name: "Type de ticket", value: context?.type || "Non défini", inline: true },
-                { name: "Messages", value: `${context?.messageCount || 0}`, inline: true }
-            )
-            .setTimestamp();
-
-        // Envoi des logs dans les salons dédiés
-        const logChannel = await channel.guild.channels.fetch(LOGS_CHANNEL).catch(() => null);
-        if (logChannel) await logChannel.send({ embeds: [logEmbed], files: attachment ? [attachment] : [] }).catch(() => {});
-
-        const archiveChannel = await channel.guild.channels.fetch(ARCHIVE_CHANNEL).catch(() => null);
-        if (archiveChannel && attachment) await archiveChannel.send({ embeds: [logEmbed], files: [attachment] }).catch(() => {});
-
-        // 5. Envoi du formulaire d'avis en MP au demandeur du ticket
-        if (sendReviewPrompt && context?.userId) {
-            const targetUser = await client.users.fetch(context.userId).catch(() => null);
-            if (targetUser) {
-                const ratingRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`rate_1_${claimedOrStaffId}`).setLabel("1 ⭐").setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder().setCustomId(`rate_2_${claimedOrStaffId}`).setLabel("2 ⭐").setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder().setCustomId(`rate_3_${claimedOrStaffId}`).setLabel("3 ⭐").setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder().setCustomId(`rate_4_${claimedOrStaffId}`).setLabel("4 ⭐").setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId(`rate_5_${claimedOrStaffId}`).setLabel("5 ⭐").setStyle(ButtonStyle.Success)
-                );
-
-                const reviewPromptEmbed = new EmbedBuilder()
-                    .setColor("#2F3136")
-                    .setTitle(`${EMOJIS.certified} Votre avis sur le support Team HeLoRiA`)
-                    .setDescription(`Votre ticket **#${channel.name}** a été fermé.\n\nComment évaluez-vous la qualité de la prise en charge par notre staff ? Cliquez sur une note ci-dessous pour laisser un commentaire.`);
-
-                await targetUser.send({
-                    embeds: [reviewPromptEmbed],
-                    components: [ratingRow]
-                }).catch(() => {});
-            }
-        }
-
-        // 6. Suppression de la base de données et destruction du salon
-        if (db.tickets[channel.id]) {
-            delete db.tickets[channel.id];
-        }
-        writeDB(db);
-
-        setTimeout(() => channel.delete().catch(() => {}), 2000);
-    } catch (err) {
-        console.error("[CLOSE TICKET ERROR]", err);
-        channel.delete().catch(() => {});
-    }
-}
