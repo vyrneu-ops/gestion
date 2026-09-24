@@ -26,13 +26,24 @@ module.exports = (client) => {
 
     // Chargement de l'état des invitations au démarrage
     const initInvites = async () => {
-        if (!config?.GUILD_ID) return;
+        if (!config?.GUILD_ID) {
+            console.warn("[WELCOME LOG] Aucun GUILD_ID configuré dans welcomeConfig.");
+            return;
+        }
         const guild = client.guilds.cache.get(config.GUILD_ID);
-        if (!guild) return;
+        if (!guild) {
+            console.warn(`[WELCOME LOG] Impossible de trouver le serveur avec l'ID : ${config.GUILD_ID}`);
+            return;
+        }
 
-        const invites = await guild.invites.fetch().catch(() => null);
+        const invites = await guild.invites.fetch().catch((err) => {
+            console.error(`[WELCOME LOG] Erreur lors de la récupération des invitations pour ${guild.name} :`, err.message);
+            return null;
+        });
+
         if (invites) {
             invitesCache.set(guild.id, new Map(invites.map(i => [i.code, i.uses])));
+            console.log(`[WELCOME LOG] Cache d'invitations initialisé pour "${guild.name}" (${invites.size} invitations enregistrées).`);
         }
     };
 
@@ -49,6 +60,7 @@ module.exports = (client) => {
         const guildInvites = invitesCache.get(invite.guild.id) || new Map();
         guildInvites.set(invite.code, invite.uses);
         invitesCache.set(invite.guild.id, guildInvites);
+        console.log(`[WELCOME LOG] Nouvelle invitation créée : ${invite.code} par ${invite.inviter?.tag || "Inconnu"}`);
     });
 
     // Prise en charge des arrivées de membres
@@ -58,9 +70,18 @@ module.exports = (client) => {
         const guild = member.guild;
         const memberCount = guild.memberCount;
 
+        console.log(`[WELCOME LOG] Nouveau membre détecté : ${member.user.tag} (ID: ${member.id}) sur ${guild.name}. Total : ${memberCount}`);
+
         // 1. Attribution automatique du rôle par défaut
         if (config.AUTO_ROLE_ID && config.AUTO_ROLE_ID.trim() !== "") {
-            await member.roles.add(config.AUTO_ROLE_ID).catch(() => {});
+            try {
+                await member.roles.add(config.AUTO_ROLE_ID);
+                console.log(`[WELCOME LOG] Rôle automatique (${config.AUTO_ROLE_ID}) attribué à ${member.user.tag}.`);
+            } catch (err) {
+                console.error(`[WELCOME LOG] Échec de l'attribution du rôle automatique à ${member.user.tag} :`, err.message);
+            }
+        } else {
+            console.log("[WELCOME LOG] Aucun rôle automatique configuré (AUTO_ROLE_ID vide).");
         }
 
         // 2. Suivi du code d'invitation utilisé (avec gestion de la Vanité URL)
@@ -70,7 +91,10 @@ module.exports = (client) => {
         let isVanity = false;
 
         const oldInvites = invitesCache.get(guild.id);
-        const newInvites = await guild.invites.fetch().catch(() => null);
+        const newInvites = await guild.invites.fetch().catch((err) => {
+            console.error("[WELCOME LOG] Impossible de rafraîchir les invitations :", err.message);
+            return null;
+        });
 
         if (newInvites && oldInvites) {
             for (const [code, invite] of newInvites) {
@@ -79,6 +103,7 @@ module.exports = (client) => {
                     inviterUser = invite.inviter;
                     inviteCodeUsed = code;
                     inviteUses = invite.uses;
+                    console.log(`[WELCOME LOG] ${member.user.tag} a rejoint via l'invitation ${code} de ${inviterUser?.tag || "Inconnu"} (${inviteUses} utilisations).`);
                     break;
                 }
             }
@@ -86,11 +111,19 @@ module.exports = (client) => {
 
         // Traitement URL Personnalisée (Vanity) si aucun code classique n'a augmenté
         if (!inviteCodeUsed && guild.features.includes("VANITY_URL")) {
-            const vanityData = await guild.fetchVanityData().catch(() => null);
+            const vanityData = await guild.fetchVanityData().catch((err) => {
+                console.error("[WELCOME LOG] Erreur lors de la récupération de la Vanity URL :", err.message);
+                return null;
+            });
             if (vanityData) {
                 inviteCodeUsed = vanityData.code;
                 isVanity = true;
+                console.log(`[WELCOME LOG] ${member.user.tag} a rejoint via la Vanity URL (discord.gg/${inviteCodeUsed}).`);
             }
+        }
+
+        if (!inviteCodeUsed && !isVanity) {
+            console.log(`[WELCOME LOG] Origine de l'invitation indéterminée pour ${member.user.tag}.`);
         }
 
         if (newInvites) {
@@ -99,7 +132,11 @@ module.exports = (client) => {
 
         // 3. Message public de bienvenue
         if (config.CHANNELS?.WELCOME) {
-            const welcomeChannel = await guild.channels.fetch(config.CHANNELS.WELCOME).catch(() => null);
+            const welcomeChannel = await guild.channels.fetch(config.CHANNELS.WELCOME).catch((err) => {
+                console.error(`[WELCOME LOG] Impossible d'accéder au salon de bienvenue (${config.CHANNELS.WELCOME}) :`, err.message);
+                return null;
+            });
+
             if (welcomeChannel) {
                 let inviterText = "Lien Officiel / Discord";
                 let scoreText = "";
@@ -137,8 +174,15 @@ module.exports = (client) => {
                 if (logoUrl) footerData.iconURL = logoUrl;
                 welcomeEmbed.setFooter(footerData);
 
-                welcomeChannel.send({ content: `👋 Bienvenue ${member} !`, embeds: [welcomeEmbed] }).catch(() => {});
+                try {
+                    await welcomeChannel.send({ content: `👋 Bienvenue ${member} !`, embeds: [welcomeEmbed] });
+                    console.log(`[WELCOME LOG] Message de bienvenue envoyé dans le salon #${welcomeChannel.name} pour ${member.user.tag}.`);
+                } catch (err) {
+                    console.error(`[WELCOME LOG] Échec de l'envoi du message de bienvenue dans #${welcomeChannel.name} :`, err.message);
+                }
             }
+        } else {
+            console.log("[WELCOME LOG] Aucun salon de bienvenue n'est configuré (CHANNELS.WELCOME vide).");
         }
 
         // 4. Message Privé (DM) d'accueil de courtoisie
@@ -154,9 +198,10 @@ module.exports = (client) => {
                 .setFooter({ text: "HeLoRiA • Message Automatique" })
                 .setTimestamp();
 
-            await member.send({ embeds: [dmEmbed] }).catch(() => {});
+            await member.send({ embeds: [dmEmbed] });
+            console.log(`[WELCOME LOG] Message privé d'accueil envoyé avec succès à ${member.user.tag}.`);
         } catch (err) {
-            // Ignorer l'erreur si les MP du membre sont fermés
+            console.log(`[WELCOME LOG] Impossible d'envoyer un MP à ${member.user.tag} (MP fermés ou utilisateur bloqué).`);
         }
     });
 };

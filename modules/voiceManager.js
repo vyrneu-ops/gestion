@@ -50,15 +50,21 @@ let voiceEventsRegistered = false;
 
 // Stockage sécurisé JSON
 const DB_PATH = path.join(__dirname, "../data/voice_database.json");
-if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify({ savedConfigs: {}, whitelists: {} }, null, 4));
+if (!fs.existsSync(path.dirname(DB_PATH))) {
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    console.log(`[VOCAL LOG] Dossier de base de données créé : ${path.dirname(DB_PATH)}`);
+}
+if (!fs.existsSync(DB_PATH)) {
+    fs.writeFileSync(DB_PATH, JSON.stringify({ savedConfigs: {}, whitelists: {} }, null, 4));
+    console.log(`[VOCAL LOG] Fichier DB initialisé : ${DB_PATH}`);
+}
 
 function readDB() {
     try {
         const rawData = fs.readFileSync(DB_PATH, "utf-8");
         return JSON.parse(rawData);
     } catch (err) {
-        console.error("[VOCAL DB] Fichier corrompu ou illisible, réinitialisation de secours.", err);
+        console.error("[VOCAL LOG] Fichier DB corrompu ou inaccessible. Utilisation du fallback en mémoire.", err.message);
         return { savedConfigs: {}, whitelists: {} };
     }
 }
@@ -66,8 +72,9 @@ function readDB() {
 function writeDB(data) {
     try {
         fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 4), "utf-8");
+        console.log("[VOCAL LOG] Base de données sauvegardée avec succès.");
     } catch (err) {
-        console.error("[VOCAL DB] Échec de l'écriture.", err);
+        console.error("[VOCAL LOG] Échec d'écriture dans la base de données :", err.message);
     }
 }
 
@@ -113,29 +120,43 @@ module.exports = (client) => {
             if (!data.dashboardMessageId) return;
             const msg = await channel.messages.fetch(data.dashboardMessageId).catch(() => null);
             if (msg) {
-                await msg.edit({ embeds: [createDashboardEmbed(member, channel, data)] }).catch(() => {});
+                await msg.edit({ embeds: [createDashboardEmbed(member, channel, data)] }).catch((err) => {
+                    console.error(`[VOCAL LOG] Impossible d'éditer le dashboard dans ${channel.id} :`, err.message);
+                });
+                console.log(`[VOCAL LOG] Dashboard mis à jour pour le salon "${channel.name}" (${channel.id}).`);
             }
         } catch (err) {
-            console.error("[VOCAL] Erreur lors de la mise à jour du Tableau de Bord :", err);
+            console.error("[VOCAL LOG] Erreur critique lors de la mise à jour du Tableau de Bord :", err.message);
         }
     };
 
     // Nettoyage des salons orphelins
     const runGarbageCollector = async (guild) => {
-        if (!config?.TEMP_CATEGORY) return 0;
-        const category = await guild.channels.fetch(config.TEMP_CATEGORY).catch(() => null);
+        if (!config?.TEMP_CATEGORY) {
+            console.warn("[VOCAL LOG] TEMP_CATEGORY non définie dans la configuration.");
+            return 0;
+        }
+        const category = await guild.channels.fetch(config.TEMP_CATEGORY).catch((err) => {
+            console.error(`[VOCAL LOG] Erreur lors de la récupération de la catégorie (${config.TEMP_CATEGORY}) :`, err.message);
+            return null;
+        });
         let deletedCount = 0;
         if (category?.type === ChannelType.GuildCategory) {
-            const children = await guild.channels.fetch();
+            const children = await guild.channels.fetch().catch(() => new Map());
             for (const [_, channel] of children) {
-                if (channel.parentId !== config.TEMP_CATEGORY) continue;
+                if (!channel || channel.parentId !== config.TEMP_CATEGORY) continue;
                 if (channel.id === config.TRIGGER_CHANNEL) continue;
                 if (channel.type === ChannelType.GuildVoice && channel.members.size === 0) {
                     tempChannels.delete(channel.id);
-                    await channel.delete().catch(() => {});
+                    await channel.delete().catch((err) => {
+                        console.error(`[VOCAL LOG] Impossible de supprimer le salon orphelin ${channel.id} :`, err.message);
+                    });
                     deletedCount++;
                 }
             }
+        }
+        if (deletedCount > 0) {
+            console.log(`[VOCAL LOG] Garbage Collector : ${deletedCount} salon(s) orphelin(s) supprimé(s) sur "${guild.name}".`);
         }
         return deletedCount;
     };
@@ -145,12 +166,13 @@ module.exports = (client) => {
         for (const [_, guild] of client.guilds.cache) {
             await runGarbageCollector(guild);
         }
+        console.log("[VOCAL LOG] Infrastructure prête et synchronisée.");
     });
 
     if (voiceEventsRegistered) return;
     voiceEventsRegistered = true;
 
-    // Surveillance de la restriction textuelle (Article 3.04)
+    // Commandes administration & modération automatique textuelle (Article 3.04)
     client.on("messageCreate", async (msg) => {
         if (!msg.guild || msg.author.bot) return;
 
@@ -160,6 +182,7 @@ module.exports = (client) => {
             const command = args.shift().toLowerCase();
 
             if (command === "voice-status" && isStaff(msg.member)) {
+                console.log(`[VOCAL LOG] Commande +voice-status exécutée par ${msg.author.tag}`);
                 const db = readDB();
                 const statusEmbed = new EmbedBuilder()
                     .setColor(COLOR_GOLD)
@@ -174,6 +197,7 @@ module.exports = (client) => {
             }
 
             if (command === "voice-purge" && isStaff(msg.member)) {
+                console.log(`[VOCAL LOG] Commande +voice-purge exécutée par ${msg.author.tag}`);
                 const deleted = await runGarbageCollector(msg.guild);
                 return msg.reply(`${EMOJIS.CHECK} **${deleted}** salon(s) vocal(aux) vide(s) purgé(s) avec succès.`);
             }
@@ -183,7 +207,10 @@ module.exports = (client) => {
         if (tempChannels.has(msg.channel.id)) {
             const data = tempChannels.get(msg.channel.id);
             if (!data.chatEnabled && !isStaff(msg.member) && msg.author.id !== data.owner) {
-                await msg.delete().catch(() => {});
+                await msg.delete().catch((err) => {
+                    console.error(`[VOCAL LOG] Impossible de supprimer le message non autorisé de ${msg.author.tag} :`, err.message);
+                });
+                console.log(`[VOCAL LOG] Message supprimé dans ${msg.channel.id} (Chat désactivé). Auteur: ${msg.author.tag}`);
                 const warnMsg = await msg.channel.send({
                     content: `${msg.author},${EMOJIS.WARN} Conformément à l'**Article 3.04 du règlement**, le chat textuel de ce salon est verrouillé par le propriétaire.`
                 }).catch(() => null);
@@ -201,9 +228,11 @@ module.exports = (client) => {
             // Déclenchement de la création
             if (newState.channelId === config.TRIGGER_CHANNEL) {
                 const guild = member.guild;
+                console.log(`[VOCAL LOG] ${member.user.tag} a rejoint le canal déclencheur sur ${guild.name}.`);
 
                 // Anti-Spam / Cooldown
                 if (creationQueue.has(member.id)) {
+                    console.log(`[VOCAL LOG] Déconnexion de ${member.user.tag} : création déjà en cours (anti-spam).`);
                     return member.voice.disconnect().catch(() => {});
                 }
 
@@ -212,7 +241,10 @@ module.exports = (client) => {
                     if (data.owner === member.id) {
                         const existingChan = await guild.channels.fetch(chanId).catch(() => null);
                         if (existingChan) {
-                            await member.voice.setChannel(existingChan).catch(() => {});
+                            console.log(`[VOCAL LOG] Redirection de ${member.user.tag} vers son salon existant (${chanId}).`);
+                            await member.voice.setChannel(existingChan).catch((err) => {
+                                console.error(`[VOCAL LOG] Échec de la redirection de ${member.user.tag} :`, err.message);
+                            });
                             return;
                         }
                     }
@@ -279,12 +311,17 @@ module.exports = (client) => {
                     parent: config.TEMP_CATEGORY,
                     permissionOverwrites: contextPermissions,
                     userLimit: userTemplate?.userLimit || 0
-                }).catch(() => null);
+                }).catch((err) => {
+                    console.error(`[VOCAL LOG] Échec de la création du salon pour ${member.user.tag} :`, err.message);
+                    return null;
+                });
 
                 if (!targetChannel) {
                     creationQueue.delete(member.id);
                     return;
                 }
+
+                console.log(`[VOCAL LOG] Nouveau salon éphémère créé : "${targetChannel.name}" (${targetChannel.id}) pour${member.user.tag}`);
 
                 const runtimeData = {
                     owner: member.id,
@@ -300,8 +337,10 @@ module.exports = (client) => {
 
                 tempChannels.set(targetChannel.id, runtimeData);
 
-                // Déplacement du membre
-                await member.voice.setChannel(targetChannel).catch(() => {});
+                // Déplacement du membre dans son nouveau salon
+                await member.voice.setChannel(targetChannel).catch((err) => {
+                    console.error(`[VOCAL LOG] Échec du déplacement de ${member.user.tag} vers le nouveau salon :`, err.message);
+                });
                 creationQueue.delete(member.id);
 
                 // Composants UI
@@ -344,7 +383,10 @@ module.exports = (client) => {
                     content: `Bienvenue dans ton salon ${member} !`,
                     embeds: [createDashboardEmbed(member, targetChannel, runtimeData)],
                     components: [row1, row2, row3, rowLimits]
-                }).catch(() => null);
+                }).catch((err) => {
+                    console.error(`[VOCAL LOG] Impossible d'envoyer le dashboard dans "${targetChannel.name}" :`, err.message);
+                    return null;
+                });
 
                 if (dashboardMsg) {
                     runtimeData.dashboardMessageId = dashboardMsg.id;
@@ -359,16 +401,21 @@ module.exports = (client) => {
                 data.uniqueMembers.add(member.id);
             }
 
-            // Nettoyage lors de la fermeture du salon
+            // Nettoyage lors de la fermeture du salon quand il devient vide
             const expiredChannel = oldState.channel;
             if (expiredChannel && tempChannels.has(expiredChannel.id)) {
                 setTimeout(async () => {
                     const instance = await expiredChannel.fetch().catch(() => null);
                     if (!instance || instance.members.size === 0) {
                         const data = tempChannels.get(expiredChannel.id);
-                        
                         const durationMinutes = Math.max(1, Math.round((Date.now() - (data?.createdAt || Date.now())) / 60000));
-                        const logChan = await expiredChannel.guild.channels.fetch(config.LOGS_CHANNEL).catch(() => null);
+                        
+                        console.log(`[VOCAL LOG] Salon vide détecté pour destruction : "${expiredChannel.name}" (Durée : ${durationMinutes} min, Membres uniques :${data?.uniqueMembers.size || 0})`);
+
+                        const logChan = await expiredChannel.guild.channels.fetch(config.LOGS_CHANNEL).catch((err) => {
+                            console.error(`[VOCAL LOG] Impossible d'accéder au salon de logs (${config.LOGS_CHANNEL}) :`, err.message);
+                            return null;
+                        });
                         
                         if (logChan && data) {
                             const statsEmbed = new EmbedBuilder()
@@ -384,17 +431,20 @@ module.exports = (client) => {
                         }
 
                         tempChannels.delete(expiredChannel.id);
-                        await instance?.delete().catch(() => {});
+                        await instance?.delete().catch((err) => {
+                            console.error(`[VOCAL LOG] Erreur lors de la suppression du salon ${expiredChannel.id} :`, err.message);
+                        });
+                        console.log(`[VOCAL LOG] Salon ${expiredChannel.id} nettoyé et supprimé.`);
                     }
                 }, 2000);
             }
 
         } catch (error) {
-            console.error("[SYSTÈME VOCAL] Erreur d'exécution :", error);
+            console.error("[VOCAL LOG] Erreur critique lors de la mise à jour de l'état vocal :", error);
         }
     });
 
-    // Interactions
+    // Interactions avec les boutons, modales et menus
     client.on("interactionCreate", async (interaction) => {
         try {
             const activeVoice = interaction.channel;
@@ -402,15 +452,17 @@ module.exports = (client) => {
 
             const runtimeData = tempChannels.get(activeVoice.id);
 
-            // Bouton Réclamer
+            // Bouton Réclamer la propriété du salon
             if (interaction.isButton() && interaction.customId === "vc_claim") {
                 await interaction.deferReply({ ephemeral: true });
                 const currentOwner = activeVoice.members.get(runtimeData.owner);
 
                 if (currentOwner) {
+                    console.log(`[VOCAL LOG] Tentative de réclamation rejetée dans ${activeVoice.id} par ${interaction.user.tag} (Propriétaire présent).`);
                     return interaction.editReply({ content: `${EMOJIS.WARN} Le propriétaire actuel se trouve toujours dans le salon vocal.` });
                 }
 
+                console.log(`[VOCAL LOG] Propriété du salon ${activeVoice.id} réclamée par ${interaction.user.tag}`);
                 runtimeData.owner = interaction.user.id;
                 tempChannels.set(activeVoice.id, runtimeData);
                 await updateDashboard(activeVoice, interaction.member, runtimeData);
@@ -427,6 +479,7 @@ module.exports = (client) => {
 
             // Boutons principaux
             if (interaction.isButton()) {
+                console.log(`[VOCAL LOG] Bouton pressé : ${interaction.customId} par ${interaction.user.tag} dans le salon ${activeVoice.id}`);
                 switch (interaction.customId) {
                     case "vc_open":
                         await interaction.deferReply({ ephemeral: true });
@@ -469,7 +522,9 @@ module.exports = (client) => {
                     case "vc_mute_member":
                     case "vc_transfer":
                     case "vc_save_whitelist":
-                        const selectMenu = new UserSelectMenuBuilder().setCustomId(`user_${interaction.customId}`).setPlaceholder("👤 Sélectionnez un membre dans la liste...");
+                        const selectMenu = new UserSelectMenuBuilder()
+                            .setCustomId(`user_${interaction.customId}`)
+                            .setPlaceholder("👤 Sélectionnez un membre dans la liste...");
                         return interaction.reply({ components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
 
                     case "vc_rename":
@@ -502,15 +557,18 @@ module.exports = (client) => {
                             userLimit: runtimeData.userLimit
                         };
                         writeDB(db);
+                        console.log(`[VOCAL LOG] Configuration sauvegardée pour ${interaction.user.tag}`);
                         return interaction.editReply({ content: `${EMOJIS.SAVE} Votre configuration personnelle a été sauvegardée avec succès.` });
                 }
             }
 
-            // Menus de sélection utilisateur
+            // Menus de sélection d'utilisateurs
             if (interaction.isUserSelectMenu()) {
                 await interaction.deferReply({ ephemeral: true });
                 const selectedUser = interaction.users.first();
                 if (!selectedUser) return interaction.editReply({ content: `${EMOJIS.WARN} Utilisateur introuvable.` });
+
+                console.log(`[VOCAL LOG] UserSelectMenu (${interaction.customId}) exécuté par ${interaction.user.tag} sur ${selectedUser.tag}`);
 
                 if (interaction.customId === "user_vc_permit") {
                     await activeVoice.permissionOverwrites.edit(selectedUser.id, { Connect: true, ViewChannel: true }).catch(() => {});
@@ -554,19 +612,23 @@ module.exports = (client) => {
                     tempChannels.set(activeVoice.id, runtimeData);
                     const newOwnerMember = await interaction.guild.members.fetch(selectedUser.id).catch(() => null);
                     if (newOwnerMember) await updateDashboard(activeVoice, newOwnerMember, runtimeData);
+                    console.log(`[VOCAL LOG] Propriété du salon ${activeVoice.id} transférée à ${selectedUser.tag}`);
                     return interaction.editReply({ content: `${EMOJIS.CROWN} La propriété du salon a été transférée à ${selectedUser}.` });
                 }
             }
 
-            // Réglage de la limite de places
+            // Réglage de la limite de places via menu déroulant
             if (interaction.isStringSelectMenu() && interaction.customId === "vc_limit_select") {
                 await interaction.deferReply({ ephemeral: true });
                 const limit = parseInt(interaction.values[0], 10);
                 runtimeData.userLimit = limit;
                 tempChannels.set(activeVoice.id, runtimeData);
 
-                await activeVoice.setUserLimit(limit).catch(() => {});
+                await activeVoice.setUserLimit(limit).catch((err) => {
+                    console.error(`[VOCAL LOG] Échec du changement de limite sur ${activeVoice.id} :`, err.message);
+                });
                 await updateDashboard(activeVoice, interaction.member, runtimeData);
+                console.log(`[VOCAL LOG] Limite changée à ${limit} places par ${interaction.user.tag} sur ${activeVoice.id}`);
                 return interaction.editReply({ content: `${EMOJIS.CHECK} Capacité du salon mise à jour avec succès.` });
             }
 
@@ -574,11 +636,14 @@ module.exports = (client) => {
             if (interaction.isStringSelectMenu() && interaction.customId === "vc_select_bitrate") {
                 await interaction.deferReply({ ephemeral: true });
                 const bitrate = parseInt(interaction.values[0], 10);
-                await activeVoice.setBitrate(bitrate).catch(() => {});
+                await activeVoice.setBitrate(bitrate).catch((err) => {
+                    console.error(`[VOCAL LOG] Échec du changement de bitrate sur ${activeVoice.id} :`, err.message);
+                });
+                console.log(`[VOCAL LOG] Bitrate changé à ${bitrate} bps par ${interaction.user.tag} sur ${activeVoice.id}`);
                 return interaction.editReply({ content: `${EMOJIS.BITRATE} Qualité audio modifiée avec succès (\`${bitrate / 1000} kbps\`).` });
             }
 
-            // Traitement de la modale de nom
+            // Traitement de la modale de renommage
             if (interaction.isModalSubmit() && interaction.customId === "vc_modal_rename") {
                 await interaction.deferReply({ ephemeral: true });
                 const newName = interaction.fields.getTextInputValue("new_name").trim();
@@ -587,17 +652,22 @@ module.exports = (client) => {
                     return interaction.editReply({ content: `${EMOJIS.WARN} Le nom du salon ne peut pas être vide.` });
                 }
 
-                const renamed = await activeVoice.setName(newName).catch(() => null);
+                const renamed = await activeVoice.setName(newName).catch((err) => {
+                    console.error(`[VOCAL LOG] Échec du renommage du salon ${activeVoice.id} :`, err.message);
+                    return null;
+                });
+
                 if (!renamed) {
                     return interaction.editReply({ content: `${EMOJIS.WARN} Impossible de renommer le salon pour le moment (limite de fréquence Discord atteinte).` });
                 }
                 
+                console.log(`[VOCAL LOG] Salon ${activeVoice.id} renommé en "${newName}" par ${interaction.user.tag}`);
                 await updateDashboard(activeVoice, interaction.member, runtimeData);
                 return interaction.editReply({ content: `${EMOJIS.CHECK} Salon renommé avec succès : **${newName}**` });
             }
 
         } catch (error) {
-            console.error("[SYSTÈME VOCAL] Erreur d'interaction :", error);
+            console.error("[VOCAL LOG] Erreur critique lors du traitement d'une interaction :", error);
         }
     });
 };

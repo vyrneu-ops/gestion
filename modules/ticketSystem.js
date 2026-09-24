@@ -624,8 +624,10 @@ module.exports = async (client) => {
             // --- BLACKLIST ---
             if (i.customId === "blacklist_user") {
                 if (!context) return i.reply({ content: `${EMOJIS.warning} Données introuvables.`, ephemeral: true });
-                db.blacklist.push(context.userId);
-                writeDB(db);
+                if (!db.blacklist.includes(context.userId)) {
+                    db.blacklist.push(context.userId);
+                    writeDB(db);
+                }
                 await i.reply(`${EMOJIS.ban} Utilisateur blacklisté. Suppression du ticket...`);
                 return await closeTicketSystem(i.channel, client, context, i.user, false);
             }

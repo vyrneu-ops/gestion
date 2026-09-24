@@ -120,12 +120,17 @@ const ROSTER_POLES = [
 ];
 
 // =====================================================
-// STOCKAGE
+// STOCKAGE FONDATION
 // =====================================================
 
 function ensureStore() {
-    if (!fs.existsSync(STORE_DIR)) {
-        fs.mkdirSync(STORE_DIR, { recursive: true });
+    try {
+        if (!fs.existsSync(STORE_DIR)) {
+            fs.mkdirSync(STORE_DIR, { recursive: true });
+            console.log(`[ROSTER LOG] Dossier de stockage créé : ${STORE_DIR}`);
+        }
+    } catch (error) {
+        console.error("[ROSTER LOG] Erreur lors de la création du dossier :", error.message);
     }
 }
 
@@ -133,10 +138,11 @@ function loadStore() {
     ensureStore();
     try {
         if (fs.existsSync(STORE_PATH)) {
-            return JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'));
+            const raw = fs.readFileSync(STORE_PATH, 'utf8');
+            return JSON.parse(raw);
         }
     } catch (error) {
-        console.error('[ROSTER] Erreur de lecture :', error);
+        console.error("[ROSTER LOG] Erreur de lecture du fichier de configuration :", error.message);
     }
     return {};
 }
@@ -145,8 +151,9 @@ function saveStore(data) {
     ensureStore();
     try {
         fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 4), 'utf8');
+        console.log("[ROSTER LOG] Configuration sauvegardée dans le registre.");
     } catch (error) {
-        console.error('[ROSTER] Erreur de sauvegarde :', error);
+        console.error("[ROSTER LOG] Erreur d'écriture du registre :", error.message);
     }
 }
 
@@ -156,7 +163,10 @@ function saveStore(data) {
 
 function getRoleMembers(guild, roleId) {
     const role = guild.roles.cache.get(roleId);
-    if (!role) return [];
+    if (!role) {
+        console.warn(`[ROSTER LOG] Rôle introuvable sur le serveur (ID: ${roleId})`);
+        return [];
+    }
 
     return [...role.members.values()].sort((a, b) =>
         a.displayName.localeCompare(b.displayName, 'fr', { sensitivity: 'base' })
@@ -177,7 +187,6 @@ function formatMembers(members) {
 function buildEmbed(guild) {
     let totalRosterMembers = new Set();
 
-    // Calcul du total global de membres uniques
     for (const pole of ROSTER_POLES) {
         for (const role of pole.roles) {
             const members = getRoleMembers(guild, role.id);
@@ -217,7 +226,7 @@ function buildEmbed(guild) {
 
         embed.addFields({
             name: `${pole.name} \`[ ${countLabel} ]\``,
-            value: poleContent.trim(),
+            value: poleContent.trim() || '*Aucun membre*',
             inline: false
         });
     }
@@ -241,14 +250,21 @@ let updateTimeout = null;
 let updateRunning = false;
 
 async function updateRoster(client, guild) {
-    if (updateRunning) return;
+    if (updateRunning) {
+        console.log("[ROSTER LOG] Mise à jour déjà en cours d'exécution. Requête ignorée.");
+        return;
+    }
     updateRunning = true;
+    console.log("[ROSTER LOG] Début du rafraîchissement de l'organigramme...");
 
     try {
-        const channel = await client.channels.fetch(ROSTER_CHANNEL_ID).catch(() => null);
+        const channel = await client.channels.fetch(ROSTER_CHANNEL_ID).catch((err) => {
+            console.error(`[ROSTER LOG] Impossible d'accéder au salon (${ROSTER_CHANNEL_ID}) :`, err.message);
+            return null;
+        });
 
         if (!channel || !channel.isTextBased()) {
-            console.error('[ROSTER] Salon introuvable ou type de salon non pris en charge.');
+            console.error("[ROSTER LOG] Salon introuvable ou type de salon non pris en charge.");
             return;
         }
 
@@ -256,7 +272,10 @@ async function updateRoster(client, guild) {
         let message = null;
 
         if (store.messageId) {
-            message = await channel.messages.fetch(store.messageId).catch(() => null);
+            message = await channel.messages.fetch(store.messageId).catch(() => {
+                console.warn(`[ROSTER LOG] Message initial (${store.messageId}) non trouvé, création d'un nouveau.`);
+                return null;
+            });
         }
 
         const embed = buildEmbed(guild);
@@ -277,6 +296,7 @@ async function updateRoster(client, guild) {
                 embeds: [embed],
                 allowedMentions: { parse: [], users: allowedUsers, roles: [], repliedUser: false }
             });
+            console.log(`[ROSTER LOG] Embed de l'organigramme mis à jour avec succès (ID Message: ${message.id}).`);
         } else {
             message = await channel.send({
                 embeds: [embed],
@@ -287,10 +307,11 @@ async function updateRoster(client, guild) {
                 messageId: message.id,
                 channelId: channel.id
             });
+            console.log(`[ROSTER LOG] Nouveau message d'organigramme généré (ID Message: ${message.id}).`);
         }
 
     } catch (error) {
-        console.error('[ROSTER] Erreur lors du rafraîchissement :', error);
+        console.error("[ROSTER LOG] Erreur lors du rafraîchissement de l'organigramme :", error);
     } finally {
         updateRunning = false;
     }
@@ -299,6 +320,7 @@ async function updateRoster(client, guild) {
 function scheduleUpdate(client, guild) {
     if (updateTimeout) clearTimeout(updateTimeout);
 
+    console.log("[ROSTER LOG] Mise à jour planifiée (Debounce 1000ms)...");
     updateTimeout = setTimeout(() => {
         updateTimeout = null;
         updateRoster(client, guild);
@@ -310,19 +332,32 @@ function scheduleUpdate(client, guild) {
 // =====================================================
 
 module.exports = async function rosterObjective(client) {
-    const channel = await client.channels.fetch(ROSTER_CHANNEL_ID).catch(() => null);
+    console.log("[ROSTER LOG] Initialisation du module Organigramme & Roster...");
+
+    const channel = await client.channels.fetch(ROSTER_CHANNEL_ID).catch((err) => {
+        console.error(`[ROSTER LOG] Erreur d'accès au salon de destination (${ROSTER_CHANNEL_ID}) :`, err.message);
+        return null;
+    });
 
     if (!channel || !channel.guild) {
-        console.error('[ROSTER] Serveur introuvable.');
+        console.error("[ROSTER LOG] Serveur ou salon cible introuvable. Arrêt du module.");
         return;
     }
 
     const guild = channel.guild;
-    await guild.members.fetch();
+
+    try {
+        console.log(`[ROSTER LOG] Synchronisation de l'annuaire des membres pour "${guild.name}"...`);
+        await guild.members.fetch();
+        console.log(`[ROSTER LOG] Synchronisation des membres réussie (${guild.memberCount} membres en cache).`);
+    } catch (err) {
+        console.error("[ROSTER LOG] Erreur lors de la récupération complète des membres :", err.message);
+    }
 
     await updateRoster(client, guild);
-    console.log(`[ROSTER] Module initialisé sur ${guild.name}.`);
+    console.log(`[ROSTER LOG] Module organigramme prêt sur "${guild.name}".`);
 
+    // Surveillance des modifications de rôles
     client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
         const relevantRoles = new Set(
             ROSTER_POLES.flatMap(pole => pole.roles.map(role => role.id))
@@ -336,15 +371,18 @@ module.exports = async function rosterObjective(client) {
 
         if (!affectsRoster) return;
 
+        console.log(`[ROSTER LOG] Changement de rôle impactant le Roster détecté pour ${newMember.user.tag}.`);
         scheduleUpdate(client, newMember.guild);
     });
 
+    // Intervalle de mise à jour périodique (30 secondes)
     setInterval(async () => {
         try {
-            await guild.members.fetch();
+            console.log("[ROSTER LOG] Synchronisation périodique de fond (30s)...");
+            await guild.members.fetch().catch(() => {});
             await updateRoster(client, guild);
         } catch (error) {
-            console.error('[ROSTER] Erreur lors de la mise à jour automatique :', error);
+            console.error("[ROSTER LOG] Erreur lors de la synchronisation de fond :", error.message);
         }
     }, 30000);
 };
