@@ -1,6 +1,6 @@
 module.exports = (client) => {
     // ID du salon vocal du compteur
-    const CHANNEL_ID = "1550597435418615899";
+    const CHANNEL_ID = "1553373002119385139";
     
     // Variables de contrôle de flux et d'anti-rate limit
     let isUpdating = false;
