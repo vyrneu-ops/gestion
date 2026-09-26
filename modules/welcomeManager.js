@@ -1,10 +1,8 @@
 const { EmbedBuilder } = require("discord.js");
 const config = require("../data/welcomeConfig");
 
-// Palette de couleurs & Charte HeLoRiA
 const COLOR_GOLD = "#D4AF37";
 
-// Registre d'emojis personnalisés
 const EMOJIS = {
     WELCOME: "<:5647premiumicon:1533535330538360942>",
     MEMBERS: "<:75828briefcase:1537579702812807248>",
@@ -14,126 +12,165 @@ const EMOJIS = {
     SUPPORT: "<:94919trialmod:1537582836318609521>"
 };
 
+// Cache d'invitations par serveur : code -> { uses, maxUses, inviterId, inviterTag }
 const invitesCache = new Map();
+// File d'attente par serveur pour éviter les conditions de course quand
+// plusieurs membres rejoignent en même temps (raid, boost du serveur, etc.)
+const inviteResolutionQueue = new Map();
 
-// Utilitaire pour valider les URLs d'images
 function validUrl(url) {
     return (typeof url === "string" && url.trim().length > 0 && url.startsWith("http")) ? url : null;
 }
 
-module.exports = (client) => {
-    console.log("[SYSTÈME] Initialisation du module Welcome Manager HeLoRiA...");
+function snapshotInvites(invites) {
+    return new Map(invites.map(i => [i.code, {
+        uses: i.uses,
+        maxUses: i.maxUses,
+        inviterId: i.inviter?.id || null,
+        inviterTag: i.inviter?.tag || null
+    }]));
+}
 
-    // Chargement de l'état des invitations au démarrage
+function queueInviteResolution(guildId, task) {
+    const previous = inviteResolutionQueue.get(guildId) || Promise.resolve();
+    const next = previous.then(task, task).catch((err) => {
+        console.error("[WELCOME] Erreur dans la file de résolution d'invitations :", err);
+        return { inviterTag: null, inviteCodeUsed: null, inviteUses: 0, isVanity: false };
+    });
+    inviteResolutionQueue.set(guildId, next);
+    return next;
+}
+
+/** Détermine par quelle invitation un membre est arrivé, de façon sérialisée par serveur. */
+async function resolveInviteUsage(guild) {
+    let inviterTag = null;
+    let inviteCodeUsed = null;
+    let inviteUses = 0;
+    let isVanity = false;
+
+    const oldInvites = invitesCache.get(guild.id);
+    const newInvites = await guild.invites.fetch().catch((err) => {
+        console.error("[WELCOME] Impossible de rafraîchir les invitations :", err.message);
+        return null;
+    });
+
+    if (newInvites && oldInvites) {
+        for (const [code, invite] of newInvites) {
+            const old = oldInvites.get(code);
+            const oldUses = old?.uses ?? 0;
+            if (invite.uses > oldUses) {
+                inviterTag = invite.inviter?.tag || null;
+                inviteCodeUsed = code;
+                inviteUses = invite.uses;
+                break;
+            }
+        }
+
+        // Cas d'une invitation à usage unique : elle a été consommée et
+        // supprimée par Discord avant qu'on ait pu la revoir dans la liste.
+        if (!inviteCodeUsed) {
+            for (const [code, old] of oldInvites) {
+                if (newInvites.has(code)) continue;
+                if (old.maxUses && old.uses === old.maxUses - 1) {
+                    inviterTag = old.inviterTag;
+                    inviteCodeUsed = code;
+                    inviteUses = old.maxUses;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!inviteCodeUsed && guild.features.includes("VANITY_URL")) {
+        const vanityData = await guild.fetchVanityData().catch((err) => {
+            console.error("[WELCOME] Erreur lors de la récupération de la Vanity URL :", err.message);
+            return null;
+        });
+        if (vanityData) {
+            inviteCodeUsed = vanityData.code;
+            isVanity = true;
+        }
+    }
+
+    if (newInvites) invitesCache.set(guild.id, snapshotInvites(newInvites));
+
+    return { inviterTag, inviteCodeUsed, inviteUses, isVanity };
+}
+
+let welcomeModuleInitialized = false;
+
+module.exports = (client) => {
+    if (welcomeModuleInitialized) return;
+    welcomeModuleInitialized = true;
+
+    console.log("[WELCOME] Initialisation du module Welcome Manager...");
+
     const initInvites = async () => {
         if (!config?.GUILD_ID) {
-            console.warn("[WELCOME LOG] Aucun GUILD_ID configuré dans welcomeConfig.");
+            console.warn("[WELCOME] Aucun GUILD_ID configuré dans welcomeConfig.");
             return;
         }
         const guild = client.guilds.cache.get(config.GUILD_ID);
         if (!guild) {
-            console.warn(`[WELCOME LOG] Impossible de trouver le serveur avec l'ID : ${config.GUILD_ID}`);
+            console.warn(`[WELCOME] Impossible de trouver le serveur avec l'ID : ${config.GUILD_ID}`);
             return;
         }
 
         const invites = await guild.invites.fetch().catch((err) => {
-            console.error(`[WELCOME LOG] Erreur lors de la récupération des invitations pour ${guild.name} :`, err.message);
+            console.error(`[WELCOME] Erreur lors de la récupération des invitations pour ${guild.name} :`, err.message);
             return null;
         });
 
         if (invites) {
-            invitesCache.set(guild.id, new Map(invites.map(i => [i.code, i.uses])));
-            console.log(`[WELCOME LOG] Cache d'invitations initialisé pour "${guild.name}" (${invites.size} invitations enregistrées).`);
+            invitesCache.set(guild.id, snapshotInvites(invites));
+            console.log(`[WELCOME] Cache d'invitations initialisé pour "${guild.name}" (${invites.size} invitations).`);
         }
     };
 
-    if (client.isReady()) {
-        initInvites();
-    } else {
-        client.once("ready", initInvites);
-    }
+    if (client.isReady()) initInvites();
+    else client.once("ready", initInvites);
 
-    // Suivi de la création d'invitation pour le cache interne
-    client.on("inviteCreate", async (invite) => {
+    client.on("inviteCreate", (invite) => {
         if (!config?.GUILD_ID || invite.guild.id !== config.GUILD_ID) return;
 
         const guildInvites = invitesCache.get(invite.guild.id) || new Map();
-        guildInvites.set(invite.code, invite.uses);
+        guildInvites.set(invite.code, {
+            uses: invite.uses,
+            maxUses: invite.maxUses,
+            inviterId: invite.inviter?.id || null,
+            inviterTag: invite.inviter?.tag || null
+        });
         invitesCache.set(invite.guild.id, guildInvites);
-        console.log(`[WELCOME LOG] Nouvelle invitation créée : ${invite.code} par ${invite.inviter?.tag || "Inconnu"}`);
     });
 
-    // Prise en charge des arrivées de membres
     client.on("guildMemberAdd", async (member) => {
         if (!config?.GUILD_ID || member.guild.id !== config.GUILD_ID) return;
 
         const guild = member.guild;
         const memberCount = guild.memberCount;
 
-        console.log(`[WELCOME LOG] Nouveau membre détecté : ${member.user.tag} (ID: ${member.id}) sur ${guild.name}. Total : ${memberCount}`);
-
-        // 1. Attribution automatique du rôle par défaut
-        if (config.AUTO_ROLE_ID && config.AUTO_ROLE_ID.trim() !== "") {
+        // 1. Rôle automatique
+        if (config.AUTO_ROLE_ID?.trim()) {
             try {
                 await member.roles.add(config.AUTO_ROLE_ID);
-                console.log(`[WELCOME LOG] Rôle automatique (${config.AUTO_ROLE_ID}) attribué à ${member.user.tag}.`);
             } catch (err) {
-                console.error(`[WELCOME LOG] Échec de l'attribution du rôle automatique à ${member.user.tag} :`, err.message);
-            }
-        } else {
-            console.log("[WELCOME LOG] Aucun rôle automatique configuré (AUTO_ROLE_ID vide).");
-        }
-
-        // 2. Suivi du code d'invitation utilisé (avec gestion de la Vanité URL)
-        let inviterUser = null;
-        let inviteCodeUsed = null;
-        let inviteUses = 0;
-        let isVanity = false;
-
-        const oldInvites = invitesCache.get(guild.id);
-        const newInvites = await guild.invites.fetch().catch((err) => {
-            console.error("[WELCOME LOG] Impossible de rafraîchir les invitations :", err.message);
-            return null;
-        });
-
-        if (newInvites && oldInvites) {
-            for (const [code, invite] of newInvites) {
-                const oldUses = oldInvites.get(code) || 0;
-                if (invite.uses > oldUses) {
-                    inviterUser = invite.inviter;
-                    inviteCodeUsed = code;
-                    inviteUses = invite.uses;
-                    console.log(`[WELCOME LOG] ${member.user.tag} a rejoint via l'invitation ${code} de ${inviterUser?.tag || "Inconnu"} (${inviteUses} utilisations).`);
-                    break;
-                }
+                console.error(`[WELCOME] Échec de l'attribution du rôle automatique à ${member.user.tag} :`, err.message);
             }
         }
 
-        // Traitement URL Personnalisée (Vanity) si aucun code classique n'a augmenté
-        if (!inviteCodeUsed && guild.features.includes("VANITY_URL")) {
-            const vanityData = await guild.fetchVanityData().catch((err) => {
-                console.error("[WELCOME LOG] Erreur lors de la récupération de la Vanity URL :", err.message);
-                return null;
-            });
-            if (vanityData) {
-                inviteCodeUsed = vanityData.code;
-                isVanity = true;
-                console.log(`[WELCOME LOG] ${member.user.tag} a rejoint via la Vanity URL (discord.gg/${inviteCodeUsed}).`);
-            }
-        }
+        // 2. Détection de l'invitation utilisée (sérialisée par serveur)
+        const { inviterTag, inviteCodeUsed, inviteUses, isVanity } = await queueInviteResolution(guild.id, () => resolveInviteUsage(guild));
 
-        if (!inviteCodeUsed && !isVanity) {
-            console.log(`[WELCOME LOG] Origine de l'invitation indéterminée pour ${member.user.tag}.`);
-        }
-
-        if (newInvites) {
-            invitesCache.set(guild.id, new Map(newInvites.map(i => [i.code, i.uses])));
-        }
+        console.log(
+            inviteCodeUsed
+                ? `[WELCOME] ${member.user.tag} a rejoint via ${isVanity ? `la Vanity URL (${inviteCodeUsed})` : `l'invitation ${inviteCodeUsed} de ${inviterTag || "Inconnu"}`}.`
+                : `[WELCOME] Origine de l'invitation indéterminée pour ${member.user.tag}.`
+        );
 
         // 3. Message public de bienvenue
         if (config.CHANNELS?.WELCOME) {
             const welcomeChannel = await guild.channels.fetch(config.CHANNELS.WELCOME).catch((err) => {
-                console.error(`[WELCOME LOG] Impossible d'accéder au salon de bienvenue (${config.CHANNELS.WELCOME}) :`, err.message);
+                console.error(`[WELCOME] Impossible d'accéder au salon de bienvenue (${config.CHANNELS.WELCOME}) :`, err.message);
                 return null;
             });
 
@@ -141,8 +178,8 @@ module.exports = (client) => {
                 let inviterText = "Lien Officiel / Discord";
                 let scoreText = "";
 
-                if (inviterUser) {
-                    inviterText = `**${inviterUser.username}**`;
+                if (inviterTag && !isVanity) {
+                    inviterText = `**${inviterTag}**`;
                     scoreText = `(\`${inviteUses}\` invitations)`;
                 } else if (isVanity) {
                     inviterText = `Lien Personnalisé (\`discord.gg/${inviteCodeUsed}\`)`;
@@ -176,16 +213,13 @@ module.exports = (client) => {
 
                 try {
                     await welcomeChannel.send({ content: `👋 Bienvenue ${member} !`, embeds: [welcomeEmbed] });
-                    console.log(`[WELCOME LOG] Message de bienvenue envoyé dans le salon #${welcomeChannel.name} pour ${member.user.tag}.`);
                 } catch (err) {
-                    console.error(`[WELCOME LOG] Échec de l'envoi du message de bienvenue dans #${welcomeChannel.name} :`, err.message);
+                    console.error(`[WELCOME] Échec de l'envoi du message de bienvenue dans #${welcomeChannel.name} :`, err.message);
                 }
             }
-        } else {
-            console.log("[WELCOME LOG] Aucun salon de bienvenue n'est configuré (CHANNELS.WELCOME vide).");
         }
 
-        // 4. Message Privé (DM) d'accueil de courtoisie
+        // 4. Message privé de courtoisie
         try {
             const dmEmbed = new EmbedBuilder()
                 .setColor(COLOR_GOLD)
@@ -199,9 +233,8 @@ module.exports = (client) => {
                 .setTimestamp();
 
             await member.send({ embeds: [dmEmbed] });
-            console.log(`[WELCOME LOG] Message privé d'accueil envoyé avec succès à ${member.user.tag}.`);
-        } catch (err) {
-            console.log(`[WELCOME LOG] Impossible d'envoyer un MP à ${member.user.tag} (MP fermés ou utilisateur bloqué).`);
+        } catch {
+            console.log(`[WELCOME] Impossible d'envoyer un MP à ${member.user.tag} (MP fermés ou utilisateur bloqué).`);
         }
     });
 };

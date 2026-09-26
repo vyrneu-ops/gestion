@@ -17,7 +17,8 @@ const fetch = require("node-fetch");
 const discordTranscripts = require("discord-html-transcripts");
 const config = require("../data/ticket_database");
 
-// --- EMOJIS PERSONNALISÉS ---
+// Emojis custom du serveur. Les IDs sont spécifiques à la guild HeLoRiA,
+// il faudra les remplacer si le bot tourne ailleurs.
 const EMOJIS = {
     warning: "<:warningd:1533535400176386068>",
     loading: "<a:loadingicon:1533535386951749683>",
@@ -37,13 +38,17 @@ const EMOJIS = {
     rules: "<:580437rules:1537583160345366578>"
 };
 
-// --- CANAUX CONSTANTS ---
 const LOGS_CHANNEL = "1535306876164640920";
 const ARCHIVE_CHANNEL = "1541230358526304256";
 const AVIS_CHANNEL = "1541544133171347710";
 const DB_PATH = path.join(__dirname, "../data/ticket_database.json");
 
-// Mappage des rôles spécifiques de pôle aux rôles principaux d'appartenance
+// NB: le fichier de config "../data/ticket_database.js" et la base JSON
+// "../data/ticket_database.json" portent le même nom de base. Ça fonctionne
+// (Node résout le .js en priorité) mais un renommage éviterait toute confusion
+// future, notamment si quelqu'un modifie un require à la main.
+
+// Association pôle -> rôle spécifique + rôle "parent" du pôle
 const ROLE_MAPPING = {
     grinder1: { roleId: config.ROLES_POLES?.grinder1, mainPoleId: config.ROLES_POLES?.main_grinder },
     grinder2: { roleId: config.ROLES_POLES?.grinder2, mainPoleId: config.ROLES_POLES?.main_grinder },
@@ -56,7 +61,24 @@ const ROLE_MAPPING = {
     esport: { roleId: config.ROLES_POLES?.esport, mainPoleId: config.ROLES_POLES?.main_esport }
 };
 
-// --- BASE DE DONNÉES ---
+// Identifiants gérés par ce module, pour ignorer rapidement toute interaction
+// qui appartient à un autre fichier (évite de lire la DB pour rien et
+// d'interférer avec les autres listeners du bot).
+const TICKET_BUTTON_IDS = new Set([
+    "create_voice_channel",
+    "force_delete_ticket",
+    "assign_pole_menu",
+    "trigger_check_pr",
+    "claim",
+    "create_staff_thread",
+    "ticket_ping_user",
+    "close_with_review",
+    "blacklist_user"
+]);
+const TICKET_SELECT_IDS = new Set(["ticket_select", "select_pole_to_assign"]);
+
+// --- Base de données locale (JSON) ---
+
 if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify({ tickets: {}, blacklist: [], stats: {} }, null, 4));
 
@@ -80,15 +102,16 @@ function writeDB(data) {
     }
 }
 
-// --- UTILITAIRES ---
+// --- Utilitaires ---
+
 function cleanPRInput(input) {
     if (!input) return 0;
-    let str = input.toLowerCase().trim().replace(/\s+/g, '').replace(',', '.');
-    if (str.endsWith('k')) {
-        const val = parseFloat(str.replace('k', ''));
+    const str = input.toLowerCase().trim().replace(/\s+/g, "").replace(",", ".");
+    if (str.endsWith("k")) {
+        const val = parseFloat(str.replace("k", ""));
         return isNaN(val) ? 0 : Math.round(val * 1000);
     }
-    const cleanStr = str.replace(/[^0-9]/g, '');
+    const cleanStr = str.replace(/[^0-9]/g, "");
     const parsed = parseInt(cleanStr, 10);
     return isNaN(parsed) ? 0 : parsed;
 }
@@ -118,12 +141,11 @@ async function fetchFortnitePR(epicUsername) {
 
         const json = await response.json();
         const segments = json.data?.segments || [];
-        
+
         let prEU = 0;
         for (const seg of segments) {
             if (seg.attributes?.region === "EU" || seg.metadata?.name?.includes("Europe")) {
-                const prVal = seg.stats?.pr?.value || seg.stats?.powerRanking?.value || 0;
-                prEU += prVal;
+                prEU += seg.stats?.pr?.value || seg.stats?.powerRanking?.value || 0;
             }
         }
         return { prEU };
@@ -153,20 +175,30 @@ async function getCategoryForType(guild, type) {
     return null;
 }
 
-// --- FONCTION SUPRÊME DE CLÔTURE & SUPPRESSION ---
-async function closeTicketSystem(channel, client, context, closedByUser, sendReview = true) {
+function buildTicketChannelName(type, username) {
+    return `${type}-${username}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]/g, "")
+        .slice(0, 100);
+}
+
+/**
+ * Ferme un ticket : supprime le vocal associé, génère le transcript,
+ * l'envoie en logs/archives, demande un avis au propriétaire, met à jour
+ * les stats du staff, puis supprime le salon.
+ */
+async function closeTicketSystem(channel, client, ticketContext, closedByUser, sendReview = true) {
     try {
         const guild = channel.guild;
         const db = readDB();
-        const ticketData = context || db.tickets[channel.id];
+        const ticketData = ticketContext || db.tickets[channel.id];
+        const staffId = ticketData?.claimedBy || closedByUser?.id || client.user.id;
 
-        // 1. Suppression du salon vocal s'il existe
         if (ticketData?.voiceChannelId) {
             const vc = await guild.channels.fetch(ticketData.voiceChannelId).catch(() => null);
             if (vc) await vc.delete().catch(() => {});
         }
 
-        // 2. Génération du Transcript HTML
         let transcriptAttachment = null;
         try {
             transcriptAttachment = await discordTranscripts.createTranscript(channel, {
@@ -178,7 +210,6 @@ async function closeTicketSystem(channel, client, context, closedByUser, sendRev
             console.error("[TRANSCRIPT ERROR]", err);
         }
 
-        // 3. Envoi du transcript aux salons d'archive/logs
         const logChannel = await guild.channels.fetch(LOGS_CHANNEL).catch(() => null);
         const archiveChannel = await guild.channels.fetch(ARCHIVE_CHANNEL).catch(() => null);
 
@@ -192,18 +223,16 @@ async function closeTicketSystem(channel, client, context, closedByUser, sendRev
             )
             .setTimestamp();
 
-        if (logChannel && typeof logChannel.send === "function") {
+        if (logChannel?.send) {
             await logChannel.send({ embeds: [summaryEmbed], files: transcriptAttachment ? [transcriptAttachment] : [] }).catch(console.error);
         }
-        if (archiveChannel && typeof archiveChannel.send === "function") {
+        if (archiveChannel?.send) {
             await archiveChannel.send({ embeds: [summaryEmbed], files: transcriptAttachment ? [transcriptAttachment] : [] }).catch(console.error);
         }
 
-        // 4. Envoi de la demande d'avis en MP à l'utilisateur
         if (sendReview && ticketData?.userId) {
             const targetUser = await client.users.fetch(ticketData.userId).catch(() => null);
             if (targetUser) {
-                const staffId = ticketData.claimedBy || (closedByUser ? closedByUser.id : client.user.id);
                 const reviewEmbed = new EmbedBuilder()
                     .setColor("#2F3136")
                     .setTitle(`${EMOJIS.ticket} ÉVALUATION DE VOTRE SUPPORT`)
@@ -221,13 +250,12 @@ async function closeTicketSystem(channel, client, context, closedByUser, sendRev
             }
         }
 
-        // 5. Nettoyage DB
-        if (db.tickets[channel.id]) {
-            delete db.tickets[channel.id];
-            writeDB(db);
-        }
+        // Stats + suppression de l'entrée ticket, en une seule écriture
+        if (!db.stats[staffId]) db.stats[staffId] = { closedTickets: 0, reviews: [] };
+        db.stats[staffId].closedTickets += 1;
+        if (db.tickets[channel.id]) delete db.tickets[channel.id];
+        writeDB(db);
 
-        // 6. Suppression du salon textuel
         setTimeout(() => channel.delete().catch(() => {}), 1500);
     } catch (err) {
         console.error("[CLOSE TICKET ERROR]", err);
@@ -237,19 +265,19 @@ async function closeTicketSystem(channel, client, context, closedByUser, sendRev
 module.exports = async (client) => {
     console.log("[TICKET SYSTEM] Initialisation du système de tickets...");
 
-    // --- SUIVI DES MESSAGES DANS LES TICKETS ---
     client.on("messageCreate", async (message) => {
         if (message.author.bot || !message.guild) return;
 
         const db = readDB();
-        if (db.tickets[message.channel.id]) {
-            db.tickets[message.channel.id].lastActivity = Date.now();
-            db.tickets[message.channel.id].messageCount = (db.tickets[message.channel.id].messageCount || 0) + 1;
-            writeDB(db);
-        }
+        const ticket = db.tickets[message.channel.id];
+        if (!ticket) return;
+
+        ticket.lastActivity = Date.now();
+        ticket.messageCount = (ticket.messageCount || 0) + 1;
+        writeDB(db);
     });
 
-    // --- MISE EN PLACE DU PANEL DANS LE SALON ---
+    // Panel de support : on nettoie les anciens messages du bot puis on repost
     const panelChannel = await client.channels.fetch(config.PANEL_CHANNEL).catch(() => null);
     if (panelChannel) {
         const cachedMessages = await panelChannel.messages.fetch({ limit: 10 }).catch(() => null);
@@ -290,10 +318,22 @@ module.exports = async (client) => {
         }).catch(() => {});
     }
 
-    // --- GESTION DES INTERACTIONS ---
     client.on("interactionCreate", async (i) => {
+        try {
+            await handleInteraction(i, client);
+        } catch (err) {
+            console.error("[TICKET INTERACTION ERROR]", err);
+            const errorPayload = { content: `${EMOJIS.warning} Une erreur inattendue est survenue.`, ephemeral: true };
+            if (i.deferred || i.replied) {
+                await i.followUp(errorPayload).catch(() => {});
+            } else {
+                await i.reply(errorPayload).catch(() => {});
+            }
+        }
+    });
 
-        // --- GESTION EN MP (Avis) ---
+    async function handleInteraction(i, client) {
+        // --- Interactions en MP (avis post-ticket) ---
         if (!i.guild) {
             if (i.isButton() && i.customId.startsWith("rate_")) {
                 const [, stars, staffId] = i.customId.split("_");
@@ -308,9 +348,9 @@ module.exports = async (client) => {
             }
 
             if (i.isModalSubmit() && i.customId.startsWith("submit_review_")) {
-                await i.deferReply().catch(() => {});
+                await i.deferReply();
                 const [, , starsStr, staffId] = i.customId.split("_");
-                const stars = parseInt(starsStr);
+                const stars = parseInt(starsStr, 10);
                 const comment = i.fields.getTextInputValue("comment");
                 const db = readDB();
 
@@ -332,7 +372,7 @@ module.exports = async (client) => {
                 const guildInstance = client.guilds.cache.first();
                 if (guildInstance) {
                     const reviewLogs = await guildInstance.channels.fetch(AVIS_CHANNEL).catch(() => null);
-                    if (reviewLogs && typeof reviewLogs.send === "function") await reviewLogs.send({ embeds: [reviewEmbed] });
+                    if (reviewLogs?.send) await reviewLogs.send({ embeds: [reviewEmbed] });
                 }
 
                 return i.editReply({ content: `${EMOJIS.certified} Merci ! Votre évaluation a bien été enregistrée.` });
@@ -340,13 +380,25 @@ module.exports = async (client) => {
             return;
         }
 
-        // --- 1. SÉLECTION DU MOTIF -> AFFICHAGE DIRECT DU FORMULAIRE ---
+        // Interactions qui n'appartiennent pas à ce module : on ne touche à rien
+        const isTicketButton = i.isButton() && TICKET_BUTTON_IDS.has(i.customId);
+        const isTicketSelect = i.isStringSelectMenu() && TICKET_SELECT_IDS.has(i.customId);
+        const isTicketCreationModal = i.isModalSubmit() && i.customId.startsWith("create_ticket_modal_");
+        const isPrCheckModal = i.isModalSubmit() && i.customId === "process_pr_check";
+
+        if (!isTicketButton && !isTicketSelect && !isTicketCreationModal && !isPrCheckModal) return;
+
+        // --- Sélection du motif -> ouverture du formulaire adapté ---
         if (i.isStringSelectMenu() && i.customId === "ticket_select") {
             const db = readDB();
-            if (db.blacklist.includes(i.user.id)) return i.reply({ content: `${EMOJIS.warning} Vous êtes banni du système de support.`, ephemeral: true });
+            if (db.blacklist.includes(i.user.id)) {
+                return i.reply({ content: `${EMOJIS.warning} Vous êtes banni du système de support.`, ephemeral: true });
+            }
 
-            const hasTicket = Object.values(db.tickets).some(t => t.userId === i.user.id && t.status === "open");
-            if (hasTicket) return i.reply({ content: `${EMOJIS.warning} Vous avez déjà un ticket ouvert sur le serveur.`, ephemeral: true });
+            const hasOpenTicket = Object.values(db.tickets).some(t => t.userId === i.user.id && t.status === "open");
+            if (hasOpenTicket) {
+                return i.reply({ content: `${EMOJIS.warning} Vous avez déjà un ticket ouvert sur le serveur.`, ephemeral: true });
+            }
 
             const type = i.values[0];
             const modal = new ModalBuilder().setCustomId(`create_ticket_modal_${type}`).setTitle("Formulaire de Demande");
@@ -377,8 +429,8 @@ module.exports = async (client) => {
             return i.showModal(modal);
         }
 
-        // --- 2. TRAITEMENT DU FORMULAIRE ET CRÉATION DU TICKET ---
-        if (i.isModalSubmit() && i.customId.startsWith("create_ticket_modal_")) {
+        // --- Traitement du formulaire et création du ticket ---
+        if (isTicketCreationModal) {
             const type = i.customId.replace("create_ticket_modal_", "");
             await i.deferReply({ ephemeral: true });
 
@@ -389,12 +441,12 @@ module.exports = async (client) => {
                     { id: i.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles] }
                 ];
 
-                (config.ROLES[type] || []).forEach(rId => {
-                    basePermissions.push({ id: rId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
+                (config.ROLES[type] || []).forEach(roleId => {
+                    basePermissions.push({ id: roleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
                 });
 
                 const ticketChannel = await i.guild.channels.create({
-                    name: `${type}-${i.user.username}`.toLowerCase().replace(/[^a-z0-9-_]/g, ''),
+                    name: buildTicketChannelName(type, i.user.username),
                     type: ChannelType.GuildText,
                     parent: categoryId || null,
                     permissionOverwrites: basePermissions
@@ -404,7 +456,7 @@ module.exports = async (client) => {
                 db.tickets[ticketChannel.id] = {
                     userId: i.user.id,
                     username: i.user.username,
-                    type: type,
+                    type,
                     createdAt: Date.now(),
                     lastActivity: Date.now(),
                     messageCount: 0,
@@ -463,204 +515,13 @@ module.exports = async (client) => {
 
                 return i.editReply({ content: `${EMOJIS.certified} Votre ticket a été créé avec succès : ${ticketChannel}` });
             } catch (err) {
-                console.error(err);
+                console.error("[TICKET CREATE ERROR]", err);
                 return i.editReply({ content: `${EMOJIS.warning} Erreur lors de la création du salon.` });
             }
         }
 
-        // --- 3. ACTIONS BOUTONS & SÉLECTEURS DANS LE TICKET ---
-        const db = readDB();
-        const context = db.tickets[i.channel.id];
-        const isStaffUser = context 
-            ? (config.ROLES[context.type] || []).some(rId => i.member.roles.cache.has(rId)) || i.member.permissions.has(PermissionsBitField.Flags.ManageChannels)
-            : i.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
-
-        if (i.isButton()) {
-            if (!isStaffUser && !["close_with_review"].includes(i.customId)) {
-                return i.reply({ content: `${EMOJIS.warning} Action réservée au Staff.`, ephemeral: true });
-            }
-
-            // --- CRÉATION DE SALON VOCAL ASSOCIÉ ---
-            if (i.customId === "create_voice_channel") {
-                if (context && context.voiceChannelId) return i.reply({ content: `${EMOJIS.warning} Un salon vocal existe déjà pour ce ticket.`, ephemeral: true });
-
-                await i.deferReply({ ephemeral: true });
-                const voiceChannel = await i.guild.channels.create({
-                    name: `🔊-${i.channel.name}`,
-                    type: ChannelType.GuildVoice,
-                    parent: i.channel.parentId,
-                    permissionOverwrites: i.channel.permissionOverwrites.cache.map(p => p)
-                });
-
-                if (context) {
-                    context.voiceChannelId = voiceChannel.id;
-                    writeDB(db);
-                }
-
-                return i.editReply({ content: `${EMOJIS.certified} Salon vocal créé : ${voiceChannel}` });
-            }
-
-            // --- DESTRUCTION TOTALE / SUPPRESSION TICKET + VOCAL ---
-            if (i.customId === "force_delete_ticket") {
-                await i.reply({ content: `${EMOJIS.loading} Suppression du ticket et du vocal associé...` });
-                
-                if (context?.voiceChannelId) {
-                    const vc = await i.guild.channels.fetch(context.voiceChannelId).catch(() => null);
-                    if (vc) await vc.delete().catch(() => {});
-                }
-
-                if (db.tickets[i.channel.id]) {
-                    delete db.tickets[i.channel.id];
-                    writeDB(db);
-                }
-
-                setTimeout(() => i.channel.delete().catch(() => {}), 1500);
-                return;
-            }
-
-            // --- DÉCLENCHEMENT DU MENU DE SÉLECTION DU PÔLE ---
-            if (i.customId === "assign_pole_menu") {
-                const poleSelect = new StringSelectMenuBuilder()
-                    .setCustomId("select_pole_to_assign")
-                    .setPlaceholder("Sélectionnez le pôle à attribuer...")
-                    .addOptions([
-                        { label: "Pôle eSport Officiel", value: "esport", emoji: EMOJIS.premium },
-                        { label: "Pôle Académique", value: "academique", emoji: EMOJIS.certified },
-                        { label: "Centre de Formation", value: "formation", emoji: EMOJIS.briefcase },
-                        { label: "Pôle Espoir", value: "espoir", emoji: EMOJIS.update },
-                        { label: "Pôle Grinder (Grade 1)", value: "grinder1", emoji: EMOJIS.ticket },
-                        { label: "Pôle Grinder (Grade 2)", value: "grinder2", emoji: EMOJIS.ticket },
-                        { label: "Pôle Grinder (Grade 3)", value: "grinder3", emoji: EMOJIS.ticket },
-                        { label: "Pôle Grinder (Grade 4)", value: "grinder4", emoji: EMOJIS.ticket },
-                        { label: "Pôle Grinder (Grade 5)", value: "grinder5", emoji: EMOJIS.ticket }
-                    ]);
-
-                return i.reply({
-                    content: "Choisissez le pôle à attribuer au membre du ticket :",
-                    components: [new ActionRowBuilder().addComponents(poleSelect)],
-                    ephemeral: true
-                });
-            }
-
-            // --- VÉRIFICATION DE PR MANUELLE (STAFF) ---
-            if (i.customId === "trigger_check_pr") {
-                const modal = new ModalBuilder().setCustomId("process_pr_check").setTitle("Vérification & Calcul PR");
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("epic_pseudo").setLabel("Pseudo Epic Games Exact").setStyle(TextInputStyle.Short).setRequired(true)),
-                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pr_overall").setLabel("PR OVERALL (Saisie)").setStyle(TextInputStyle.Short).setRequired(true))
-                );
-                return i.showModal(modal);
-            }
-
-            // --- CLAIM ---
-            if (i.customId === "claim") {
-                await i.deferUpdate();
-                if (!db.tickets[i.channel.id]) {
-                    db.tickets[i.channel.id] = {
-                        userId: i.user.id,
-                        username: i.user.username,
-                        type: "inconnu",
-                        createdAt: Date.now(),
-                        lastActivity: Date.now(),
-                        messageCount: 0,
-                        status: "open",
-                        claimedBy: i.user.id,
-                        voiceChannelId: null
-                    };
-                } else {
-                    db.tickets[i.channel.id].claimedBy = i.user.id;
-                }
-                writeDB(db);
-                await i.channel.setName(`claim-${i.channel.name}`.slice(0, 100)).catch(() => {});
-                return i.channel.send({ embeds: [new EmbedBuilder().setColor("#2F3136").setDescription(`${EMOJIS.mod} Pris en charge par **${i.user.username}**.`)] });
-            }
-
-            // --- FIL PRIVÉ STAFF ---
-            if (i.customId === "create_staff_thread") {
-                await i.deferReply({ ephemeral: true });
-                const thread = await i.channel.threads.create({
-                    name: `staff-${i.channel.name}`,
-                    autoArchiveDuration: 60,
-                    type: ChannelType.PrivateThread,
-                    reason: "Discussion privée Staff"
-                });
-                return i.editReply({ content: `${EMOJIS.mic} Fil privé créé : ${thread}` });
-            }
-
-            // --- RAPPEL MP ---
-            if (i.customId === "ticket_ping_user") {
-                await i.deferReply({ ephemeral: true });
-                if (!context || !context.userId) return i.editReply({ content: `${EMOJIS.warning} Propriétaire introuvable.` });
-
-                const targetUser = await client.users.fetch(context.userId).catch(() => null);
-                let dmSent = false;
-
-                if (targetUser) {
-                    dmSent = await targetUser.send({
-                        embeds: [
-                            new EmbedBuilder()
-                                .setColor("#2F3136")
-                                .setTitle(`${EMOJIS.ticket} Rappel de votre ticket — Team HeLoRiA`)
-                                .setDescription(`Un modérateur est en attente d'une réponse de votre part dans le salon <#${i.channel.id}>.`)
-                        ]
-                    }).then(() => true).catch(() => false);
-                }
-
-                if (dmSent) {
-                    await i.channel.send({ content: `<@${context.userId}>, une relance vous a été envoyée par message privé.` });
-                    return i.editReply({ content: `${EMOJIS.certified} Notification MP envoyée.` });
-                } else {
-                    await i.channel.send({ content: `${EMOJIS.warning} <@${context.userId}>, vos MP sont fermés. Merci de répondre dans le ticket.` });
-                    return i.editReply({ content: `${EMOJIS.warning} L'utilisateur a ses MP fermés.` });
-                }
-            }
-
-            // --- FERMETURE ---
-            if (i.customId === "close_with_review") {
-                await i.reply(`${EMOJIS.loading} Clôture et génération du transcript en cours...`);
-                return await closeTicketSystem(i.channel, client, context, i.user, true);
-            }
-
-            // --- BLACKLIST ---
-            if (i.customId === "blacklist_user") {
-                if (!context) return i.reply({ content: `${EMOJIS.warning} Données introuvables.`, ephemeral: true });
-                if (!db.blacklist.includes(context.userId)) {
-                    db.blacklist.push(context.userId);
-                    writeDB(db);
-                }
-                await i.reply(`${EMOJIS.ban} Utilisateur blacklisté. Suppression du ticket...`);
-                return await closeTicketSystem(i.channel, client, context, i.user, false);
-            }
-        }
-
-        // --- 4. TRAITEMENT DE LA SELECTION DE PÔLE (ATTRIBUTION AUTO DES RÔLES) ---
-        if (i.isStringSelectMenu() && i.customId === "select_pole_to_assign") {
-            await i.deferReply();
-            const poleKey = i.values[0];
-            const poleData = ROLE_MAPPING[poleKey];
-
-            if (!context || !context.userId) return i.editReply({ content: `${EMOJIS.warning} Impossible de trouver le membre associé.` });
-
-            const targetMember = await i.guild.members.fetch(context.userId).catch(() => null);
-            if (!targetMember) return i.editReply({ content: `${EMOJIS.warning} Le membre n'est plus sur le serveur.` });
-
-            const rolesToAdd = [];
-            if (poleData?.roleId) rolesToAdd.push(poleData.roleId);
-            if (poleData?.mainPoleId) rolesToAdd.push(poleData.mainPoleId);
-
-            if (rolesToAdd.length > 0) {
-                await targetMember.roles.add(rolesToAdd).catch(err => console.error("Erreur ajout rôles:", err));
-            }
-
-            await i.channel.send({
-                content: `${EMOJIS.certified} **Félicitations <@${context.userId}> !** Tu as été validé(e) et attribué(e) à ton pôle !`
-            });
-
-            return i.editReply({ content: `${EMOJIS.certified} Rôles attribués avec succès à <@${context.userId}> !` });
-        }
-
-        // --- 5. TRAITEMENT DU CALCUL DE PR (MODAL) ---
-        if (i.isModalSubmit() && i.customId === "process_pr_check") {
+        // --- Vérification de PR (modal, indépendant d'un ticket précis) ---
+        if (isPrCheckModal) {
             await i.deferReply();
             const epicPseudo = i.fields.getTextInputValue("epic_pseudo");
             const rawPROverall = i.fields.getTextInputValue("pr_overall");
@@ -695,5 +556,189 @@ module.exports = async (client) => {
 
             return i.editReply({ embeds: [formEmbed] });
         }
-    });
+
+        // --- À partir d'ici, tout se passe dans le salon d'un ticket ---
+        const db = readDB();
+        const context = db.tickets[i.channel.id];
+        const isStaffUser = context
+            ? (config.ROLES[context.type] || []).some(roleId => i.member.roles.cache.has(roleId)) || i.member.permissions.has(PermissionsBitField.Flags.ManageChannels)
+            : i.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
+
+        if (isTicketButton) {
+            if (!isStaffUser && i.customId !== "close_with_review") {
+                return i.reply({ content: `${EMOJIS.warning} Action réservée au Staff.`, ephemeral: true });
+            }
+
+            if (i.customId === "create_voice_channel") {
+                if (context?.voiceChannelId) {
+                    return i.reply({ content: `${EMOJIS.warning} Un salon vocal existe déjà pour ce ticket.`, ephemeral: true });
+                }
+
+                await i.deferReply({ ephemeral: true });
+                try {
+                    const voiceChannel = await i.guild.channels.create({
+                        name: `🔊-${i.channel.name}`,
+                        type: ChannelType.GuildVoice,
+                        parent: i.channel.parentId,
+                        permissionOverwrites: i.channel.permissionOverwrites.cache.map(p => p)
+                    });
+
+                    if (context) {
+                        context.voiceChannelId = voiceChannel.id;
+                        writeDB(db);
+                    }
+
+                    return i.editReply({ content: `${EMOJIS.certified} Salon vocal créé : ${voiceChannel}` });
+                } catch (err) {
+                    console.error("[VOICE CHANNEL ERROR]", err);
+                    return i.editReply({ content: `${EMOJIS.warning} Impossible de créer le salon vocal (permissions manquantes ?).` });
+                }
+            }
+
+            if (i.customId === "force_delete_ticket") {
+                await i.reply({ content: `${EMOJIS.loading} Suppression du ticket et du vocal associé...` });
+
+                if (context?.voiceChannelId) {
+                    const vc = await i.guild.channels.fetch(context.voiceChannelId).catch(() => null);
+                    if (vc) await vc.delete().catch(() => {});
+                }
+
+                if (db.tickets[i.channel.id]) {
+                    delete db.tickets[i.channel.id];
+                    writeDB(db);
+                }
+
+                setTimeout(() => i.channel.delete().catch(() => {}), 1500);
+                return;
+            }
+
+            if (i.customId === "assign_pole_menu") {
+                const poleSelect = new StringSelectMenuBuilder()
+                    .setCustomId("select_pole_to_assign")
+                    .setPlaceholder("Sélectionnez le pôle à attribuer...")
+                    .addOptions([
+                        { label: "Pôle eSport Officiel", value: "esport", emoji: EMOJIS.premium },
+                        { label: "Pôle Académique", value: "academique", emoji: EMOJIS.certified },
+                        { label: "Centre de Formation", value: "formation", emoji: EMOJIS.briefcase },
+                        { label: "Pôle Espoir", value: "espoir", emoji: EMOJIS.update },
+                        { label: "Pôle Grinder (Grade 1)", value: "grinder1", emoji: EMOJIS.ticket },
+                        { label: "Pôle Grinder (Grade 2)", value: "grinder2", emoji: EMOJIS.ticket },
+                        { label: "Pôle Grinder (Grade 3)", value: "grinder3", emoji: EMOJIS.ticket },
+                        { label: "Pôle Grinder (Grade 4)", value: "grinder4", emoji: EMOJIS.ticket },
+                        { label: "Pôle Grinder (Grade 5)", value: "grinder5", emoji: EMOJIS.ticket }
+                    ]);
+
+                return i.reply({
+                    content: "Choisissez le pôle à attribuer au membre du ticket :",
+                    components: [new ActionRowBuilder().addComponents(poleSelect)],
+                    ephemeral: true
+                });
+            }
+
+            if (i.customId === "trigger_check_pr") {
+                const modal = new ModalBuilder().setCustomId("process_pr_check").setTitle("Vérification & Calcul PR");
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("epic_pseudo").setLabel("Pseudo Epic Games Exact").setStyle(TextInputStyle.Short).setRequired(true)),
+                    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pr_overall").setLabel("PR OVERALL (Saisie)").setStyle(TextInputStyle.Short).setRequired(true))
+                );
+                return i.showModal(modal);
+            }
+
+            if (i.customId === "claim") {
+                await i.deferUpdate();
+
+                if (!context) {
+                    // On évite de fabriquer une entrée avec le staff comme "propriétaire" :
+                    // ça fausserait les stats et l'attribution de pôle plus tard.
+                    return i.followUp({ content: `${EMOJIS.warning} Ce ticket n'a pas d'entrée en base de données, impossible de le prendre en charge automatiquement.`, ephemeral: true });
+                }
+
+                context.claimedBy = i.user.id;
+                writeDB(db);
+                await i.channel.setName(`claim-${i.channel.name}`.slice(0, 100)).catch(() => {});
+                return i.channel.send({ embeds: [new EmbedBuilder().setColor("#2F3136").setDescription(`${EMOJIS.mod} Pris en charge par **${i.user.username}**.`)] });
+            }
+
+            if (i.customId === "create_staff_thread") {
+                await i.deferReply({ ephemeral: true });
+                try {
+                    const thread = await i.channel.threads.create({
+                        name: `staff-${i.channel.name}`.slice(0, 100),
+                        autoArchiveDuration: 60,
+                        type: ChannelType.PrivateThread,
+                        reason: "Discussion privée Staff"
+                    });
+                    return i.editReply({ content: `${EMOJIS.mic} Fil privé créé : ${thread}` });
+                } catch (err) {
+                    console.error("[STAFF THREAD ERROR]", err);
+                    return i.editReply({ content: `${EMOJIS.warning} Impossible de créer le fil (niveau de boost insuffisant pour un fil privé ?).` });
+                }
+            }
+
+            if (i.customId === "ticket_ping_user") {
+                await i.deferReply({ ephemeral: true });
+                if (!context?.userId) return i.editReply({ content: `${EMOJIS.warning} Propriétaire introuvable.` });
+
+                const targetUser = await client.users.fetch(context.userId).catch(() => null);
+                const dmSent = targetUser
+                    ? await targetUser.send({
+                        embeds: [
+                            new EmbedBuilder()
+                                .setColor("#2F3136")
+                                .setTitle(`${EMOJIS.ticket} Rappel de votre ticket — Team HeLoRiA`)
+                                .setDescription(`Un modérateur est en attente d'une réponse de votre part dans le salon <#${i.channel.id}>.`)
+                        ]
+                    }).then(() => true).catch(() => false)
+                    : false;
+
+                if (dmSent) {
+                    await i.channel.send({ content: `<@${context.userId}>, une relance vous a été envoyée par message privé.` });
+                    return i.editReply({ content: `${EMOJIS.certified} Notification MP envoyée.` });
+                }
+
+                await i.channel.send({ content: `${EMOJIS.warning} <@${context.userId}>, vos MP sont fermés. Merci de répondre dans le ticket.` });
+                return i.editReply({ content: `${EMOJIS.warning} L'utilisateur a ses MP fermés.` });
+            }
+
+            if (i.customId === "close_with_review") {
+                await i.reply(`${EMOJIS.loading} Clôture et génération du transcript en cours...`);
+                return closeTicketSystem(i.channel, client, context, i.user, true);
+            }
+
+            if (i.customId === "blacklist_user") {
+                if (!context) return i.reply({ content: `${EMOJIS.warning} Données introuvables.`, ephemeral: true });
+
+                if (!db.blacklist.includes(context.userId)) {
+                    db.blacklist.push(context.userId);
+                    writeDB(db);
+                }
+
+                await i.reply(`${EMOJIS.ban} Utilisateur blacklisté. Suppression du ticket...`);
+                return closeTicketSystem(i.channel, client, context, i.user, false);
+            }
+        }
+
+        // --- Attribution du pôle choisi (rôles auto) ---
+        if (isTicketSelect && i.customId === "select_pole_to_assign") {
+            if (!isStaffUser) {
+                return i.reply({ content: `${EMOJIS.warning} Action réservée au Staff.`, ephemeral: true });
+            }
+
+            await i.deferReply();
+            const poleData = ROLE_MAPPING[i.values[0]];
+
+            if (!context?.userId) return i.editReply({ content: `${EMOJIS.warning} Impossible de trouver le membre associé.` });
+
+            const targetMember = await i.guild.members.fetch(context.userId).catch(() => null);
+            if (!targetMember) return i.editReply({ content: `${EMOJIS.warning} Le membre n'est plus sur le serveur.` });
+
+            const rolesToAdd = [poleData?.roleId, poleData?.mainPoleId].filter(Boolean);
+            if (rolesToAdd.length > 0) {
+                await targetMember.roles.add(rolesToAdd).catch(err => console.error("[ROLE ASSIGN ERROR]", err));
+            }
+
+            await i.channel.send({ content: `${EMOJIS.certified} **Félicitations <@${context.userId}> !** Tu as été validé(e) et attribué(e) à ton pôle !` });
+            return i.editReply({ content: `${EMOJIS.certified} Rôles attribués avec succès à <@${context.userId}> !` });
+        }
+    }
 };

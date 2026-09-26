@@ -4,25 +4,21 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-// =====================================================
-// GESTION GLOBALE DES ERREURS (ANTI-CRASH PRINCIPAL)
-// =====================================================
+// --- Gestion globale des erreurs (anti-crash) ---
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('[ANTI-CRASH LOG] Rejet de promesse non géré :', promise, 'Raison :', reason);
+    console.error('[ANTI-CRASH] Rejet de promesse non géré :', promise, 'Raison :', reason);
 });
 
 process.on('uncaughtException', (error, origin) => {
-    console.error('[ANTI-CRASH LOG] Exception non capturée :', error, 'Origine :', origin);
+    console.error('[ANTI-CRASH] Exception non capturée :', error, 'Origine :', origin);
 });
 
 process.on('uncaughtExceptionMonitor', (error, origin) => {
-    console.error('[ANTI-CRASH LOG] Surveillance d\'exception non capturée :', error, 'Origine :', origin);
+    console.error('[ANTI-CRASH] Surveillance d\'exception non capturée :', error, 'Origine :', origin);
 });
 
-// =====================================================
-// CLIENT DISCORD
-// =====================================================
+// --- Client Discord ---
 
 const client = new Client({
     intents: [
@@ -30,6 +26,7 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildPresences, // nécessaire pour la détection de jeu dans voiceManager
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages
     ],
@@ -41,12 +38,15 @@ const client = new Client({
 });
 
 client.on('error', (error) => {
-    console.error('[DISCORD API LOG] Erreur réseau/API Discord :', error.message || error);
+    console.error('[DISCORD API] Erreur réseau/API Discord :', error.message || error);
 });
 
-// =====================================================
-// IMPORT DES MODULES FONCTIONNELS
-// =====================================================
+client.on('warn', (info) => {
+    console.warn('[DISCORD API]', info);
+});
+
+// --- Modules fonctionnels ---
+// NB : ces fichiers doivent porter exactement ces noms dans ./modules/
 
 const voiceManager = require('./modules/voiceManager');
 const roleManager = require('./modules/roleManager');
@@ -55,9 +55,7 @@ const welcomeManager = require('./modules/welcomeManager');
 const rosterObjective = require('./modules/rosterObjective');
 const statCounter = require('./modules/statCounter');
 
-// =====================================================
-// IMPORT DES MODULES D'EMBEDS (RESERVED)
-// =====================================================
+// --- Modules d'embeds (réservés, non branchés pour l'instant) ---
 
 const voiceInfo = require('./embeds/voiceInfo');
 const infoPack = require('./embeds/infoPack');
@@ -67,31 +65,25 @@ const reglement = require('./embeds/reglement');
 const presentation = require('./embeds/presentation');
 const critereEsport = require('./embeds/critereEsport');
 
-// =====================================================
-// GESTION DU STOCKAGE DES IDS DE MESSAGES
-// =====================================================
+// --- Stockage des IDs de messages d'embeds ---
 
 const STORE_PATH = path.join(__dirname, './data/embed_messages.json');
 
 function ensureStoreDirectory() {
     try {
         const dir = path.dirname(STORE_PATH);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     } catch (err) {
-        console.error('[EMBED STORE LOG] Impossible de créer le dossier de stockage :', err.message);
+        console.error('[EMBED STORE] Impossible de créer le dossier de stockage :', err.message);
     }
 }
 
 function loadEmbedStore() {
     ensureStoreDirectory();
     try {
-        if (fs.existsSync(STORE_PATH)) {
-            return JSON.parse(fs.readFileSync(STORE_PATH, 'utf-8'));
-        }
+        if (fs.existsSync(STORE_PATH)) return JSON.parse(fs.readFileSync(STORE_PATH, 'utf-8'));
     } catch (err) {
-        console.error('[EMBED STORE LOG] Erreur lors de la lecture du magasin d\'embeds :', err.message);
+        console.error('[EMBED STORE] Erreur lors de la lecture du magasin d\'embeds :', err.message);
     }
     return {};
 }
@@ -101,22 +93,17 @@ function saveEmbedStore(data) {
     try {
         fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 4), 'utf-8');
     } catch (err) {
-        console.error('[EMBED STORE LOG] Erreur lors de l\'écriture du magasin d\'embeds :', err.message);
+        console.error('[EMBED STORE] Erreur lors de l\'écriture du magasin d\'embeds :', err.message);
     }
 }
 
-// =====================================================
-// DÉPLOIEMENT / MISE À JOUR DES EMBEDS
-// =====================================================
-
+// Désactivé pour le moment : les modules d'embeds ci-dessus ne sont pas encore
+// branchés ici. À implémenter une fois leur contenu fourni.
 async function sendOrUpdateEmbeds() {
-    console.log('[EMBEDS LOG] Envoi des embeds désactivé par configuration.');
-    return;
+    console.log('[EMBEDS] Envoi des embeds désactivé par configuration.');
 }
 
-// =====================================================
-// NO STREAM / INTERDICTION DE PARTAGE D'ÉCRAN
-// =====================================================
+// --- Interdiction de partage d'écran pour certains rôles ---
 
 const NO_STREAM_ROLE_ID = '1542878480482443364';
 
@@ -126,40 +113,29 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
         const isStreaming = newState.streaming;
         const wasStreaming = oldState.streaming;
+        if (!isStreaming || wasStreaming) return;
 
-        if (isStreaming && !wasStreaming) {
-            const hasNoStreamRole = newState.member.roles.cache.has(NO_STREAM_ROLE_ID);
-            if (!hasNoStreamRole) return;
+        const hasNoStreamRole = newState.member.roles.cache.has(NO_STREAM_ROLE_ID);
+        if (!hasNoStreamRole) return;
 
-            // Déconnexion du salon vocal
-            await newState.disconnect().catch(err => 
-                console.error(`[NO STREAM LOG] Impossible de déconnecter ${newState.member.user.tag} :`, err.message)
-            );
+        await newState.disconnect().catch(err =>
+            console.error(`[NO STREAM] Impossible de déconnecter ${newState.member.user.tag} :`, err.message)
+        );
 
-            // Avertissement en MP
-            await newState.member.send(
-                `Attention : tu possèdes le rôle **no stream**, tu n'es donc pas autorisé à lancer un partage d'écran sur le serveur.`
-            ).catch(() => {});
+        await newState.member.send(
+            `Attention : tu possèdes le rôle **no stream**, tu n'es donc pas autorisé à lancer un partage d'écran sur le serveur.`
+        ).catch(() => {});
 
-            console.log(`[NO STREAM LOG] Partage d'écran interrompu pour ${newState.member.user.tag}.`);
-        }
+        console.log(`[NO STREAM] Partage d'écran interrompu pour ${newState.member.user.tag}.`);
     } catch (err) {
-        console.error('[NO STREAM LOG] Erreur lors du traitement du changement d\'état vocal :', err.message);
+        console.error('[NO STREAM] Erreur lors du traitement du changement d\'état vocal :', err.message);
     }
 });
 
-// =====================================================
-// INITIALISATION DU BOT
-// =====================================================
+// --- Initialisation du bot ---
 
 client.once('ready', async (c) => {
-    console.log('\n==========================================');
-    console.log(`[SYSTEM LOG] Bot connecté en tant que : ${c.user.tag}`);
-    console.log('==========================================\n');
-
-    // -------------------------------------------------
-    // CHARGEMENT STRUCTURÉ DES MODULES
-    // -------------------------------------------------
+    console.log(`[SYSTEM] Bot connecté en tant que : ${c.user.tag}`);
 
     const modules = [
         { name: 'VoiceManager', fn: voiceManager },
@@ -170,25 +146,25 @@ client.once('ready', async (c) => {
         { name: 'StatCounter', fn: statCounter }
     ];
 
-    for (const mod of modules) {
-        try {
-            if (typeof mod.fn === 'function') {
-                await mod.fn(client);
-                console.log(`[MODULES LOG] Module chargé avec succès : ${mod.name}`);
-            } else {
-                console.warn(`[MODULES LOG] Le module ${mod.name} n'exporte pas une fonction valide.`);
-            }
-        } catch (err) {
-            console.error(`[MODULES LOG] Erreur lors de l'initialisation du module ${mod.name} :`, err);
+    // Chargement en parallèle : un module lent à s'initialiser ne bloque plus les autres.
+    const results = await Promise.allSettled(modules.map(async (mod) => {
+        if (typeof mod.fn !== 'function') {
+            console.warn(`[MODULES] Le module ${mod.name} n'exporte pas une fonction valide.`);
+            return;
         }
-    }
+        await mod.fn(client);
+        console.log(`[MODULES] Module chargé avec succès : ${mod.name}`);
+    }));
 
-    // Déploiement des embeds de présentation si activés
-    await sendOrUpdateEmbeds().catch(err => console.error('[EMBEDS LOG] Erreur lors de la mise à jour :', err));
+    results.forEach((result, i) => {
+        if (result.status === 'rejected') {
+            console.error(`[MODULES] Erreur lors de l'initialisation du module ${modules[i].name} :`, result.reason);
+        }
+    });
 
-    // -------------------------------------------------
-    // STATUT DYNAMIQUE DU BOT
-    // -------------------------------------------------
+    await sendOrUpdateEmbeds().catch(err => console.error('[EMBEDS] Erreur lors de la mise à jour :', err));
+
+    // --- Statut dynamique du bot ---
 
     let statusIndex = 0;
 
@@ -197,56 +173,76 @@ client.once('ready', async (c) => {
             const totalMembers = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
 
             const activities = [
-                {
-                    name: 'CustomStatus',
-                    state: `${totalMembers} membres sur le serveur`,
-                    type: ActivityType.Custom
-                },
-                {
-                    name: 'CustomStatus',
-                    state: 'Dev By Logs',
-                    type: ActivityType.Custom
-                }
+                { name: 'CustomStatus', state: `${totalMembers} membres sur le serveur`, type: ActivityType.Custom },
+                { name: 'CustomStatus', state: 'Dev By Logs', type: ActivityType.Custom }
             ];
 
             client.user.setPresence({
                 activities: [activities[statusIndex]],
-                status: 'idle'
+                status: 'online'
             });
 
             statusIndex = (statusIndex + 1) % activities.length;
         } catch (err) {
-            console.error('[PRESENCE LOG] Erreur lors de la mise à jour du statut :', err.message);
+            console.error('[PRESENCE] Erreur lors de la mise à jour du statut :', err.message);
         }
     }, 15000);
 });
 
-// =====================================================
-// SERVEUR WEB EXPRESS
-// =====================================================
+// --- Serveur web Express ---
 
 const app = express();
 const PORT = process.env.PORT || 3002;
 
 app.get('/', (req, res) => {
-    res.send('Bot Gestion HeLoRiA — Operationnel');
+    res.send('Bot Gestion HeLoRiA — Opérationnel');
 });
 
-app.listen(PORT, () => {
-    console.log(`[WEB LOG] Serveur d'écoute actif sur le port ${PORT}`);
+const server = app.listen(PORT, () => {
+    console.log(`[WEB] Serveur d'écoute actif sur le port ${PORT}`);
 });
 
-// =====================================================
-// CONNEXION DISCORD
-// =====================================================
+// --- Arrêt propre (redéploiement, Ctrl+C, etc.) ---
+
+let shuttingDown = false;
+
+async function shutdown(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    console.log(`[SYSTEM] Signal ${signal} reçu, arrêt en cours...`);
+
+    const forceExit = setTimeout(() => {
+        console.warn('[SYSTEM] Arrêt propre trop long, arrêt forcé.');
+        process.exit(1);
+    }, 5000);
+    forceExit.unref();
+
+    try {
+        client.destroy();
+    } catch (err) {
+        console.error('[SYSTEM] Erreur lors de la fermeture du client Discord :', err);
+    }
+
+    server.close(() => {
+        console.log('[SYSTEM] Serveur web fermé.');
+        process.exit(0);
+    });
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+// --- Connexion Discord ---
 
 const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
 
 if (!token) {
-    console.error('[SYSTEM LOG] ERREUR : Aucun jeton Discord (TOKEN / DISCORD_TOKEN) n\'a été configuré dans l\'environnement.');
+    console.error('[SYSTEM] ERREUR : Aucun jeton Discord (TOKEN / DISCORD_TOKEN) n\'a été configuré dans l\'environnement.');
     process.exit(1);
 }
 
 client.login(token).catch(err => {
-    console.error('[SYSTEM LOG] Échec critique lors de la connexion à Discord :', err.message);
+    console.error('[SYSTEM] Échec critique lors de la connexion à Discord :', err.message);
+    process.exit(1);
 });
